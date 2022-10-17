@@ -266,8 +266,6 @@ def red(s: str):
 # Utils for invoking shell commands, parsing output, etc.
 # ===----------------------------------------------------------------------=== #
 
-# TODO: raise exceptions on errors
-
 
 def sh(
     *args: str, input: Optional[str] = None, raise_on_err: bool = True
@@ -295,6 +293,15 @@ def sh(
         raise RuntimeError(msg)
 
     return out.decode().rstrip()
+
+
+def error(msg):
+    print(red("ERROR: ") + msg)
+    exit(1)
+
+
+def log(msg, level=0):
+    print(msg)
 
 
 # Copypaste from export-pr
@@ -350,14 +357,19 @@ def is_valid_ref(ref: str) -> bool:
 
 
 def create_pr(e: StackEntry, is_draft: bool):
-    print(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")))
-    if is_draft:
-        r = sh(
-            "gh", "pr", "create", "-B", e.base, "-H", e.head, "-f", "--draft"
-        )
-    else:
-        r = sh("gh", "pr", "create", "-B", e.base, "-H", e.head, "-f")
-    print(b("Created: ") + r)
+    log(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")), level=1)
+    r = sh(
+        "gh",
+        "pr",
+        "create",
+        "-B",
+        e.base,
+        "-H",
+        e.head,
+        "-f",
+        *((["--draft"]) if is_draft else ()),
+    )
+    log(b("Created: ") + r, level=2)
     return r.split()[-1]
 
 
@@ -369,7 +381,7 @@ def get_stack(remote: str, main_branch: str) -> List[StackEntry]:
         sh("git", "rev-list", "--header", "^" + base + "^@", base)
     )[0]
 
-    # find list of commits since merge base
+    # Find list of commits since merge base.
     st: List[StackEntry] = []
     stack = (
         split_header(sh("git", "rev-list", "--header", "^" + base, "HEAD"))
@@ -394,7 +406,7 @@ def set_base_branches(st: List[StackEntry], main_branch: str):
 
 def init_branch(e: StackEntry, remote: str):
     if e.head:
-        print(h(f"Resetting branch {e.head}"))
+        log(h(f"Resetting branch {e.head}"), level=2)
         sh("git", "checkout", e.head)
         sh("git", "reset", "--hard", e.commit.commit_id())
         return
@@ -412,26 +424,23 @@ def init_branch(e: StackEntry, remote: str):
     max_ref_num = max(int(ref.split("/")[-1]) for ref in refs) if refs else 0
     new_branch_id = max_ref_num + 1
 
-    # TODO: check if local branch already exists
-    r = f"{username}/stack/{new_branch_id}"
-    e.head = r
+    e.head = f"{username}/stack/{new_branch_id}"
 
-    print(h(f"Creating branch {e.head}"))
+    log(h(f"Creating branch {e.head}"), level=2)
     try:
-        sh("git", "checkout", e.commit.commit_id(), "-b", r)
+        sh("git", "checkout", e.commit.commit_id(), "-b", e.head)
     except RuntimeError as e:
-        msg = f"Could not create local branch {r}!\n"
+        msg = f"Could not create local branch {e.head}!\n"
         msg += "This usually happens if stack-pr fails to cleanup after landing a PR. Sorry!\n"
         msg += "To fix this, please manually delete this branch from your local repo and try again:\n"
-        msg += f"\n    git branch -D {r}\n"
+        msg += f"\n    git branch -D {e.head}\n"
         msg += "\nPlease file a bug!"
         raise RuntimeError(msg)
-    sh("git", "push", remote, f"{r}:{r}")
-    return r
+    sh("git", "push", remote, f"{e.head}:{e.head}")
 
 
 def verify(st: List[StackEntry], strict=False):
-    print(h("Verifying stack info"))
+    log(h("Verifying stack info"), level=1)
     for e in st:
         if e.pr == None or e.head == None or e.base == None:
             if strict:
@@ -498,7 +507,7 @@ def verify(st: List[StackEntry], strict=False):
 
 
 def land_pr(e: StackEntry, remote: str, main_branch: str):
-    print(b("Landing ") + e.pprint())
+    log(b("Landing ") + e.pprint(), level=2)
     sh("git", "fetch", "--prune", remote)
     sh(
         "git",
@@ -507,8 +516,7 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
         e.head,
         "--committer-date-is-author-date",
     )
-    # TODO: append PR number to the title, strip stack info
-    # TODO: check for errors
+    # TODO: strip stack info
     sh("git", "push", remote, "-f", f"{e.head}:{e.head}")
     sh("gh", "pr", "edit", e.pr, "-B", main_branch)
     sh("gh", "pr", "merge", e.pr, "--squash")
@@ -520,10 +528,10 @@ def delete_branches(st: List[StackEntry], remote: str):
         sh("git", "push", "-f", remote, f":{e.head}")
 
 
-def print_stack(st: List[StackEntry]):
-    print(b("Stack:"))
+def print_stack(st: List[StackEntry], level=1):
+    log(b("Stack:"), level=level)
     for e in st[::-1]:
-        print("   * " + e.pprint())
+        log("   * " + e.pprint(), level=level)
 
 
 def generate_toc(st: List[StackEntry], current: int):
@@ -563,11 +571,9 @@ def add_cross_links(st: List[StackEntry]):
 
 def check_if_local_main_matches_origin(remote: str, main_branch: str):
     diff = sh("git", "diff", main_branch, f"{remote}/{main_branch}")
-    if diff == "":
-        return
-    print(
-        red("ERROR: ")
-        + f"""Local '{main_branch}' does not match '{remote}/{main_branch}'.
+    if diff != "":
+        error(
+            f"""Local '{main_branch}' does not match '{remote}/{main_branch}'.
 
 Please fix that before submitting a stack:
 
@@ -578,15 +584,14 @@ Please fix that before submitting a stack:
     git checkout {main_branch}
     git reset --hard {remote}/{main_branch}
 """
-    )
-    exit(0)
+        )
 
 
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
 def command_submit(args):
-    print(h("SUBMIT"))
+    log(h("SUBMIT"), level=1)
     # TODO: we should only care that local 'main' exists and stack commits can
     # be applied to it.
     # Divergence with 'origin/commit' should not be considered at 'submit' step
@@ -596,7 +601,7 @@ def command_submit(args):
     st = get_stack(args.remote, args.main_branch)
     print_stack(st)
     if not st:
-        print(h(blue("SUCCESS!")))
+        log(h(blue("SUCCESS!")), level=1)
         return
 
     current_branch = get_current_branch_name()
@@ -611,55 +616,64 @@ def command_submit(args):
             try:
                 e.pr = create_pr(e, args.draft)
             except RuntimeError as e:
-                print(red("ERROR: "), " Couldn't create a PR for")
-                print("    " + e.pprint())
-                print("Please submit a bug!")
-                raise e
+                error(
+                    f"""Couldn't create a PR for
+    {e.pprint()}
+
+Please submit a bug!
+"""
+                )
 
     verify(st, strict=True)
 
     # Start writing out changes.
-    print(h("Updating commit messages with stack metadata"))
+    log(h("Updating commit messages with stack metadata"), level=1)
     for e in st:
         try:
             e.add_or_update_metadata()
         except RuntimeError as e:
-            print(red("ERROR: "), " Couldn't update stack metadata for")
-            print("    " + e.pprint())
-            print("Please submit a bug!")
-            raise e
+            error(
+                f"""Couldn't update stack metadata for
+    {e.pprint()}
 
-    print(h("Updating remote branches"))
+Please submit a bug!
+"""
+            )
+
+    log(h("Updating remote branches"), level=1)
     for e in st:
         try:
             sh("git", "push", args.remote, "-f", f"{e.head}:{e.head}")
         except RuntimeError as e:
-            print(red("ERROR: "), " Couldn't push head branch to remote:")
-            print("    " + e.pprint())
-            print("Please submit a bug!")
-            raise e
+            error(
+                f"""Couldn't push head branch to remote:
+    {e.pprint()}
 
-    print(h(f"Checking out the origin branch '{current_branch}'"))
+Please submit a bug!
+"""
+            )
+
+    log(h(f"Checking out the origin branch '{current_branch}'"), level=1)
     sh("git", "checkout", current_branch)
     sh("git", "reset", "--hard", st[-1].head)
 
-    print(h("Adding cross-links to PRs"))
+    log(h("Adding cross-links to PRs"), level=1)
     add_cross_links(st)
-    print(h(blue("SUCCESS!")))
+    log(h(blue("SUCCESS!")), level=1)
 
 
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'land' command
 # ===----------------------------------------------------------------------=== #
 def command_land(args):
-    print(h("LAND"))
+    log(h("LAND"), level=1)
     check_if_local_main_matches_origin(args.remote, args.main_branch)
     st = get_stack(args.remote, args.main_branch)
 
     set_base_branches(st, args.main_branch)
     print_stack(st)
     if not st:
-        print(h(blue("SUCCESS!")))
+        log(h(blue("SUCCESS!")), level=1)
         return
 
     current_branch = get_current_branch_name()
@@ -676,39 +690,39 @@ def command_land(args):
     sh("git", "checkout", current_branch)
     sh("git", "reset", "--hard", st[-1].head)
 
-    print(h("Deleting local and remote branches"))
+    log(h("Deleting local and remote branches"), level=1)
     sh("git", "checkout", f"{args.remote}/{args.main_branch}")
     delete_branches(st, args.remote)
     sh("git", "rebase", f"{args.remote}/{args.main_branch}", args.main_branch)
-    print(h(blue("SUCCESS!")))
+    log(h(blue("SUCCESS!")), level=1)
 
 
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'abandon' command
 # ===----------------------------------------------------------------------=== #
 def command_abandon(args):
-    print(h("ABANDON"))
+    log(h("ABANDON"), level=1)
     check_if_local_main_matches_origin(args.remote, args.main_branch)
     st = get_stack(args.remote, args.main_branch)
 
     set_base_branches(st, args.main_branch)
     print_stack(st)
     if not st:
-        print(h(blue("SUCCESS!")))
+        log(h(blue("SUCCESS!")), level=1)
         return
     current_branch = get_current_branch_name()
 
-    print(h("Stripping stack metadata from commit messages"))
+    log(h("Stripping stack metadata from commit messages"), level=1)
     for e in st:
         e.strip_metadata()
 
-    print(h("Deleting local and remote branches"))
+    log(h("Deleting local and remote branches"), level=1)
     last_branch = st[-1].head
     sh("git", "checkout", current_branch)
     sh("git", "reset", "--hard", st[-1].head)
 
     delete_branches(st, args.remote)
-    print(h(blue("SUCCESS!")))
+    log(h(blue("SUCCESS!")), level=1)
 
 
 # ===----------------------------------------------------------------------=== #
