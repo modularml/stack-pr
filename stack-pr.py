@@ -370,8 +370,12 @@ def create_pr(e: StackEntry, is_draft: bool):
         e.base,
         "-H",
         e.head,
-        "-f",
+        "-t",
+        e.commit.title(),
+        "-F",
+        "-",
         *((["--draft"]) if is_draft else ()),
+        input=e.commit.commit_msg(),
     )
     log(b("Created: ") + r, level=2)
     return r.split()[-1]
