@@ -503,7 +503,7 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
     # TODO: check for errors
     sh("git", "push", remote, "-f", f"{e.head}:{e.head}")
     sh("gh", "pr", "edit", e.pr, "-B", main_branch)
-    sh("gh", "pr", "merge", e.pr, "-r")
+    sh("gh", "pr", "merge", e.pr, "--squash")
 
 
 def delete_branches(st: List[StackEntry], remote: str):
