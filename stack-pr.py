@@ -417,7 +417,15 @@ def init_branch(e: StackEntry, remote: str):
     e.head = r
 
     print(h(f"Creating branch {e.head}"))
-    sh("git", "checkout", e.commit.commit_id(), "-b", r)
+    try:
+        sh("git", "checkout", e.commit.commit_id(), "-b", r)
+    except RuntimeError as e:
+        msg = f"Could not create local branch {r}!\n"
+        msg += "This usually happens if stack-pr fails to cleanup after landing a PR. Sorry!\n"
+        msg += "To fix this, please manually delete this branch from your local repo and try again:\n"
+        msg += f"\n    git branch -D {r}\n"
+        msg += "\nPlease file a bug!"
+        raise RuntimeError(msg)
     sh("git", "push", remote, f"{r}:{r}")
     return r
 
