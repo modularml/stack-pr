@@ -570,6 +570,9 @@ def add_cross_links(st: List[StackEntry]):
 
 
 def check_if_local_main_matches_origin(remote: str, main_branch: str):
+    if not git_branch_exists(main_branch):
+        sh("git", "checkout", f"{remote}/{main_branch}", "-b", main_branch)
+
     diff = sh("git", "diff", main_branch, f"{remote}/{main_branch}")
     if diff != "":
         error(
