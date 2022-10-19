@@ -157,8 +157,10 @@ class StackEntry:
         else:
             pr_string = red("no PR")
         branch_string = None
-        if self.head and self.base:
-            branch_string = green(f"'{self.head}' -> '{self.base}'")
+        if self.head or self.base:
+            head_str = green(self.head) if self.head else red(str(self.head))
+            base_str = green(self.base) if self.base else red(str(self.base))
+            branch_string = f"'{head_str}' -> '{base_str}'"
         if pr_string or branch_string:
             s += " ("
         s += pr_string if pr_string else ""
@@ -752,6 +754,19 @@ def command_abandon(args):
 
 
 # ===----------------------------------------------------------------------=== #
+# Entry point for 'view' command
+# ===----------------------------------------------------------------------=== #
+def command_view(args):
+    log(h("VIEW"), level=1)
+    check_if_local_main_matches_origin(args.remote, args.main_branch)
+    st = get_stack(args.remote, args.main_branch)
+
+    set_base_branches(st, args.main_branch)
+    print_stack(st)
+    log(h(blue("SUCCESS!")), level=1)
+
+
+# ===----------------------------------------------------------------------=== #
 # Main entry point
 # ===----------------------------------------------------------------------=== #
 def main():
@@ -816,6 +831,21 @@ def main():
         help="Supress shell commands output",
     )
 
+    parser_view = subparsers.add_parser("view", help="b help")
+    parser_view.add_argument(
+        "--main-branch", default="main", help="Target branch"
+    )
+    parser_view.add_argument(
+        "-R", "--remote", default="origin", help="Remote name"
+    )
+    parser_view.add_argument(
+        "-q",
+        "--quiet",
+        action="store_false",
+        default=True,
+        help="Supress shell commands output",
+    )
+
     args, unknown = parser.parse_known_args()
     if args.quiet:
         QUIET_MODE = True
@@ -826,6 +856,8 @@ def main():
         command_land(args)
     elif args.command == "abandon":
         command_abandon(args)
+    elif args.command == "view":
+        command_view(args)
 
 
 if __name__ == "__main__":
