@@ -536,8 +536,8 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
 
 def delete_branches(st: List[StackEntry], remote: str):
     for e in st:
-        sh("git", "branch", "-D", e.head)
-        sh("git", "push", "-f", remote, f":{e.head}")
+        sh("git", "branch", "-D", e.head, raise_on_err=False)
+        sh("git", "push", "-f", remote, f":{e.head}", raise_on_err=False)
 
 
 def print_stack(st: List[StackEntry], level=1):
