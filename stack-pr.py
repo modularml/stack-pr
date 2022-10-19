@@ -355,7 +355,7 @@ def is_valid_ref(ref: str) -> bool:
     if len(splits) < 3:
         return False
     else:
-        return splits[-1].isnumeric()
+        return splits[-2] == "stack" and splits[-1].isnumeric()
 
 
 def create_pr(e: StackEntry, is_draft: bool):
@@ -422,7 +422,7 @@ def init_branch(e: StackEntry, remote: str):
     refs = sh(
         "git",
         "for-each-ref",
-        f"refs/remotes/{remote}/{username}",
+        f"refs/remotes/{remote}/{username}/stack",
         "--format=%(refname)",
     ).split()
 
@@ -434,8 +434,10 @@ def init_branch(e: StackEntry, remote: str):
 
     log(h(f"Creating branch {e.head}"), level=2)
     try:
+        if git_branch_exists(e.head):
+            sh("git", "branch", "-D", e.head)
         sh("git", "checkout", e.commit.commit_id(), "-b", e.head)
-    except RuntimeError as e:
+    except RuntimeError as ex:
         msg = f"Could not create local branch {e.head}!\n"
         msg += "This usually happens if stack-pr fails to cleanup after landing a PR. Sorry!\n"
         msg += "To fix this, please manually delete this branch from your local repo and try again:\n"
