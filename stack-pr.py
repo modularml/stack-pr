@@ -506,13 +506,6 @@ def verify(st: List[StackEntry], strict=False):
             msg += "\nPlease file a bug!"
             raise RuntimeError(msg)
 
-        if e.base != d["baseRefName"]:
-            msg = "Base branch name on github mismatches base branch name in stack metadata!"
-            msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-            msg += "PR info from github: " + str(d)
-            msg += "\nPlease file a bug!"
-            raise RuntimeError(msg)
-
 
 def land_pr(e: StackEntry, remote: str, main_branch: str):
     log(b("Landing ") + e.pprint(), level=2)
@@ -584,7 +577,19 @@ def add_cross_links(st: List[StackEntry]):
 {body}
 """
 
-        sh("gh", "pr", "edit", e.pr, "-t", title, "-F", "-", input=pr_body)
+        sh(
+            "gh",
+            "pr",
+            "edit",
+            e.pr,
+            "-t",
+            title,
+            "-F",
+            "-",
+            "-B",
+            e.base,
+            input=pr_body,
+        )
 
 
 def check_if_local_main_matches_origin(remote: str, main_branch: str):
