@@ -524,9 +524,20 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
         e.head,
         "--committer-date-is-author-date",
     )
-    # TODO: strip stack info
     sh("git", "push", remote, "-f", f"{e.head}:{e.head}")
-    sh("gh", "pr", "edit", e.pr, "-B", main_branch)
+    # Make the PR contain the original commit message and nothing else.
+    pr_body = RE_STACK_INFO_LINE.sub("", e.commit.commit_msg())
+    sh(
+        "gh",
+        "pr",
+        "edit",
+        e.pr,
+        "-B",
+        main_branch,
+        "-F",
+        "-",
+        input=pr_body,
+    )
     sh("gh", "pr", "merge", e.pr, "--squash")
 
 
@@ -556,25 +567,24 @@ def generate_toc(st: List[StackEntry], current: int):
 
 def add_cross_links(st: List[StackEntry]):
     for e in st:
-        ghinfo = sh(
-            "gh",
-            "pr",
-            "view",
-            e.pr,
-            "--json",
-            "body,title",
-        )
-        d = json.loads(ghinfo)
-        body = d["body"]
-        title = d["title"]
-        if not RE_PR_TOC.search(body):
-            toc_placeholder = "Stacked PRs:\n * #0\n\n"
-            body = toc_placeholder + body
-
         pr_id = e.pr.split("/")[-1]
-        body = RE_PR_TOC.sub(generate_toc(st, pr_id), body)
+        pr_toc = generate_toc(st, pr_id)
 
-        sh("gh", "pr", "edit", e.pr, "-t", title, "-F", "-", input=body)
+        title = e.commit.title()
+        body = e.commit.commit_msg()
+
+        # Strip title from the body - we will print it separately.
+        body = "\n".join(body.split("\n")[1:])
+
+        # Strip stack-info from the body, nothing interesting there.
+        body = RE_STACK_INFO_LINE.sub("", body)
+        pr_body = f"""{pr_toc}
+### {title}
+
+{body}
+"""
+
+        sh("gh", "pr", "edit", e.pr, "-t", title, "-F", "-", input=pr_body)
 
 
 def check_if_local_main_matches_origin(remote: str, main_branch: str):
