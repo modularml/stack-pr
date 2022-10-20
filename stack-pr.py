@@ -513,6 +513,7 @@ def verify(st: List[StackEntry], strict=False):
 
 def land_pr(e: StackEntry, remote: str, main_branch: str):
     log(b("Landing ") + e.pprint(), level=2)
+    # Rebase the head branch to the most recent 'origin/main'
     sh("git", "fetch", "--prune", remote)
     sh(
         "git",
@@ -522,8 +523,8 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
         "--committer-date-is-author-date",
     )
     sh("git", "push", remote, "-f", f"{e.head}:{e.head}")
-    # Make the PR contain the original commit message and nothing else.
-    pr_body = RE_STACK_INFO_LINE.sub("", e.commit.commit_msg())
+
+    # Switch PR base branch to 'main'
     sh(
         "gh",
         "pr",
@@ -531,11 +532,31 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
         e.pr,
         "-B",
         main_branch,
+    )
+
+    # Form the commit message: it should contain the original commit message
+    # and nothing else.
+    pr_body = RE_STACK_INFO_LINE.sub("", e.commit.commit_msg())
+
+    # Since title is passed separately, we need to strip the first line from the body:
+    lines = pr_body.split("\n")
+    pr_id = e.pr.split("/")[-1]
+    title = lines[0] + f" (#{pr_id})"
+    pr_body = "\n".join(lines[1:])
+    if pr_body == "":
+        pr_body = " "
+    sh(
+        "gh",
+        "pr",
+        "merge",
+        e.pr,
+        "--squash",
+        "-t",
+        title,
         "-F",
         "-",
         input=pr_body,
     )
-    sh("gh", "pr", "merge", e.pr, "--squash")
 
 
 def delete_branches(st: List[StackEntry], remote: str):
