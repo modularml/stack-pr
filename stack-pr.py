@@ -358,7 +358,7 @@ def is_valid_ref(ref: str) -> bool:
         return splits[-2] == "stack" and splits[-1].isnumeric()
 
 
-def create_pr(e: StackEntry, is_draft: bool):
+def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
     log(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")), level=1)
     r = sh(
         "gh",
@@ -372,6 +372,7 @@ def create_pr(e: StackEntry, is_draft: bool):
         e.commit.title(),
         "-F",
         "-",
+        *((["--reviewer", reviewer]) if reviewer != "" else ()),
         *((["--draft"]) if is_draft else ()),
         input=e.commit.commit_msg(),
     )
@@ -661,7 +662,7 @@ def command_submit(args):
     for e in st:
         if e.pr == None:
             try:
-                e.pr = create_pr(e, args.draft)
+                e.pr = create_pr(e, args.draft, args.reviewer)
             except RuntimeError as e:
                 error(
                     f"""Couldn't create a PR for
@@ -808,6 +809,9 @@ def main():
         action="store_true",
         default=False,
         help="Submit PRs in draft mode",
+    )
+    parser_submit.add_argument(
+        "--reviewer", default="", help="List of reviewers for the PR"
     )
     parser_submit.add_argument(
         "-q",
