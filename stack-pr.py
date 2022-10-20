@@ -48,11 +48,12 @@
 # ===----------------------------------------------------------------------=== #
 
 import argparse
+import json
 import os
 import re
 import subprocess
-from modular.utils.typing import Pattern, List, Optional, Union
-import json
+
+from modular.utils.typing import List, Optional, Pattern, Union
 
 # A bunch of regexps for parsing commit messages and PR descriptions
 RE_RAW_COMMIT_ID = re.compile(r"^(?P<commit>[a-f0-9]+)$", re.MULTILINE)
@@ -811,7 +812,9 @@ def main():
         help="Submit PRs in draft mode",
     )
     parser_submit.add_argument(
-        "--reviewer", default="", help="List of reviewers for the PR"
+        "--reviewer",
+        default=os.getenv("STACK_PR_DEFAULT_REVIEWER", default=""),
+        help="List of reviewers for the PR",
     )
     parser_submit.add_argument(
         "-q",
