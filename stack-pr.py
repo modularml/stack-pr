@@ -839,7 +839,9 @@ def main():
         help="Supress shell commands output",
     )
 
-    parser_abandon = subparsers.add_parser("abandon", help="Abandon the current stack")
+    parser_abandon = subparsers.add_parser(
+        "abandon", help="Abandon the current stack"
+    )
     parser_abandon.add_argument(
         "--main-branch", default="main", help="Target branch"
     )
@@ -857,7 +859,9 @@ def main():
         help="Supress shell commands output",
     )
 
-    parser_view = subparsers.add_parser("view", help="Inspect the current stack")
+    parser_view = subparsers.add_parser(
+        "view", help="Inspect the current stack"
+    )
     parser_view.add_argument(
         "--main-branch", default="main", help="Target branch"
     )
