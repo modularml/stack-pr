@@ -53,7 +53,13 @@ import os
 import re
 import subprocess
 
-from modular.utils.typing import List, Optional, Pattern, Union
+from git import (
+    branch_exists,
+    check_gh_installed,
+    get_current_branch_name,
+    get_gh_username,
+)
+from typing import List, Optional, Pattern
 
 # A bunch of regexps for parsing commit messages and PR descriptions
 RE_RAW_COMMIT_ID = re.compile(r"^(?P<commit>[a-f0-9]+)$", re.MULTILINE)
@@ -307,46 +313,6 @@ def log(msg, level=0):
     print(msg)
 
 
-# Copypaste from export-pr
-# TODO: import it instead
-def get_current_username():
-    # Query the current user.
-    user_query = subprocess.check_output(
-        'gh api graphql -f owner="UserCurrent" -f query="query { viewer {'
-        ' login } }"',
-        shell=True,
-    )
-
-    # Extract the login name.
-    m = re.search(r"\"login\":\"(.*?)\"", user_query.decode("utf-8"))
-    if not m:
-        print(
-            "Unable to find current github user name when creating anonymous"
-            " branch"
-        )
-        exit(1)
-
-    return m.group(1)
-
-
-# Copypaste from export-pr
-# TODO: import it instead
-def get_current_branch_name():
-    return (
-        subprocess.check_output("git rev-parse --abbrev-ref HEAD", shell=True)
-        .decode("utf-8")
-        .strip()
-    )
-
-
-# Copypaste from export-pr
-# TODO: import it instead
-def git_branch_exists(branch: str):
-    if not os.system("git show-ref --quiet refs/heads/" + branch):
-        return True
-    return False
-
-
 def split_header(s: str) -> List[CommitHeader]:
     return list(map(CommitHeader, s.split("\0")[:-1]))
 
@@ -419,7 +385,7 @@ def init_branch(e: StackEntry, remote: str):
         sh("git", "reset", "--hard", e.commit.commit_id())
         return
 
-    username = get_current_username()
+    username = get_gh_username()
 
     refs = sh(
         "git",
@@ -436,7 +402,7 @@ def init_branch(e: StackEntry, remote: str):
 
     log(h(f"Creating branch {e.head}"), level=2)
     try:
-        if git_branch_exists(e.head):
+        if branch_exists(e.head):
             sh("git", "branch", "-D", e.head)
         sh("git", "checkout", e.commit.commit_id(), "-b", e.head)
     except RuntimeError as ex:
@@ -616,7 +582,7 @@ def add_cross_links(st: List[StackEntry]):
 
 
 def check_if_local_main_matches_origin(remote: str, main_branch: str):
-    if not git_branch_exists(main_branch):
+    if not branch_exists(main_branch):
         sh("git", "checkout", f"{remote}/{main_branch}", "-b", main_branch)
 
     diff = sh("git", "diff", main_branch, f"{remote}/{main_branch}")
@@ -879,6 +845,8 @@ def main():
     args, unknown = parser.parse_known_args()
     if args.quiet:
         QUIET_MODE = True
+
+    check_gh_installed()
 
     if args.command == "submit":
         command_submit(args)
