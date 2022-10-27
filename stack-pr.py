@@ -64,6 +64,7 @@ from git import (
     get_gh_username,
 )
 from typing import List, Optional, Pattern
+from shell_commands import run_shell_command, get_command_output
 
 # A bunch of regexps for parsing commit messages and PR descriptions
 RE_RAW_COMMIT_ID = re.compile(r"^(?P<commit>[a-f0-9]+)$", re.MULTILINE)
@@ -213,18 +214,24 @@ class StackEntry:
             m += "\n\nstack-info: PR: xxx, branch: xxx"
             needs_update = True
 
-        sh(
-            "git",
-            "rebase",
-            self.base,
-            self.head,
-            "--committer-date-is-author-date",
+        run_shell_command(
+            [
+                "git",
+                "rebase",
+                self.base,
+                self.head,
+                "--committer-date-is-author-date",
+            ]
         )
         if needs_update:
             m = RE_STACK_INFO_LINE.sub(
                 f"\nstack-info: PR: {self.pr}, branch: {self.head}", m
             )
-            sh("git", "commit", "--amend", "-F", "-", input=m)
+            run_shell_command(
+                ["git", "commit", "--amend", "-F", "-"],
+                shell=False,
+                input=m.encode(),
+            )
 
     def strip_metadata(self):
         m = self.commit.commit_msg()
@@ -233,9 +240,15 @@ class StackEntry:
             return
 
         m = RE_STACK_INFO_LINE.sub("", m)
-        sh("git", "checkout", self.head)
-        sh("git", "rebase", self.base, "--committer-date-is-author-date")
-        sh("git", "commit", "--amend", "-F", "-", input=m)
+        run_shell_command(["git", "checkout", self.head])
+        run_shell_command(
+            ["git", "rebase", self.base, "--committer-date-is-author-date"]
+        )
+        run_shell_command(
+            ["git", "commit", "--amend", "-F", "-"],
+            shell=False,
+            input=m.encode(),
+        )
 
 
 # ===----------------------------------------------------------------------=== #
@@ -275,39 +288,6 @@ def red(s: str):
     return bcolors.FAIL + s + bcolors.ENDC
 
 
-# ===----------------------------------------------------------------------=== #
-# Utils for invoking shell commands, parsing output, etc.
-# ===----------------------------------------------------------------------=== #
-
-
-def sh(
-    *args: str, input: Optional[str] = None, raise_on_err: bool = True
-) -> str:
-    print("+", *args)
-    serr = subprocess.PIPE
-    sout = subprocess.PIPE
-    if QUIET_MODE:
-        serr = None
-
-    sin = None
-    inp = None
-    if input:
-        sin = subprocess.PIPE
-        inp = input.encode()
-    proc = subprocess.Popen(args, stdout=sout, stderr=serr, stdin=sin)
-    (out, err) = proc.communicate(input=inp)
-    exitcode = proc.returncode
-    if exitcode and raise_on_err:
-        msg = "Shell command failed:\n"
-        msg += str(args)
-        msg += "\nCommand stdout:\n"
-        msg += out.decode()
-        msg += f"\nError code: {exitcode}\n"
-        raise RuntimeError(msg)
-
-    return out.decode().rstrip()
-
-
 def error(msg):
     print(red("ERROR: ") + msg)
     exit(1)
@@ -331,21 +311,24 @@ def is_valid_ref(ref: str) -> bool:
 
 def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
     log(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")), level=1)
-    r = sh(
-        "gh",
-        "pr",
-        "create",
-        "-B",
-        e.base,
-        "-H",
-        e.head,
-        "-t",
-        e.commit.title(),
-        "-F",
-        "-",
-        *((["--reviewer", reviewer]) if reviewer != "" else ()),
-        *((["--draft"]) if is_draft else ()),
-        input=e.commit.commit_msg(),
+    r = get_command_output(
+        [
+            "gh",
+            "pr",
+            "create",
+            "-B",
+            e.base,
+            "-H",
+            e.head,
+            "-t",
+            e.commit.title(),
+            "-F",
+            "-",
+            *((["--reviewer", reviewer]) if reviewer != "" else ()),
+            *((["--draft"]) if is_draft else ()),
+        ],
+        shell=False,
+        input=e.commit.commit_msg().encode(),
     )
     log(b("Created: ") + r, level=2)
     return r.split()[-1]
@@ -353,16 +336,24 @@ def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
 
 def get_stack(remote: str, main_branch: str) -> List[StackEntry]:
     # Find merge base.
-    sh("git", "fetch", "--prune", remote)
-    base = sh("git", "merge-base", f"{remote}/{main_branch}", "HEAD")
+    run_shell_command(["git", "fetch", "--prune", remote])
+    base = get_command_output(
+        ["git", "merge-base", f"{remote}/{main_branch}", "HEAD"]
+    )
     base_obj = split_header(
-        sh("git", "rev-list", "--header", "^" + base + "^@", base)
+        get_command_output(
+            ["git", "rev-list", "--header", "^" + base + "^@", base]
+        )
     )[0]
 
     # Find list of commits since merge base.
     st: List[StackEntry] = []
     stack = (
-        split_header(sh("git", "rev-list", "--header", "^" + base, "HEAD"))
+        split_header(
+            get_command_output(
+                ["git", "rev-list", "--header", "^" + base, "HEAD"]
+            )
+        )
     )[::-1]
 
     for i in range(len(stack)):
@@ -385,17 +376,19 @@ def set_base_branches(st: List[StackEntry], main_branch: str):
 def init_branch(e: StackEntry, remote: str):
     if e.head:
         log(h(f"Resetting branch {e.head}"), level=2)
-        sh("git", "checkout", e.head)
-        sh("git", "reset", "--hard", e.commit.commit_id())
+        run_shell_command(["git", "checkout", e.head])
+        run_shell_command(["git", "reset", "--hard", e.commit.commit_id()])
         return
 
     username = get_gh_username()
 
-    refs = sh(
-        "git",
-        "for-each-ref",
-        f"refs/remotes/{remote}/{username}/stack",
-        "--format=%(refname)",
+    refs = get_command_output(
+        [
+            "git",
+            "for-each-ref",
+            f"refs/remotes/{remote}/{username}/stack",
+            "--format='%(refname)'",
+        ]
     ).split()
 
     refs = list(filter(is_valid_ref, refs))
@@ -407,8 +400,10 @@ def init_branch(e: StackEntry, remote: str):
     log(h(f"Creating branch {e.head}"), level=2)
     try:
         if branch_exists(e.head):
-            sh("git", "branch", "-D", e.head)
-        sh("git", "checkout", e.commit.commit_id(), "-b", e.head)
+            run_shell_command(["git", "branch", "-D", e.head])
+        run_shell_command(
+            ["git", "checkout", e.commit.commit_id(), "-b", e.head]
+        )
     except RuntimeError as ex:
         msg = f"Could not create local branch {e.head}!\n"
         msg += "This usually happens if stack-pr fails to cleanup after landing a PR. Sorry!\n"
@@ -416,7 +411,7 @@ def init_branch(e: StackEntry, remote: str):
         msg += f"\n    git branch -D {e.head}\n"
         msg += "\nPlease file a bug!"
         raise RuntimeError(msg)
-    sh("git", "push", remote, f"{e.head}:{e.head}")
+    run_shell_command(["git", "push", remote, f"{e.head}:{e.head}"])
 
 
 def verify(st: List[StackEntry], strict=False):
@@ -437,13 +432,15 @@ def verify(st: List[StackEntry], strict=False):
             msg += "\nPlease file a bug!"
             raise RuntimeError(msg)
 
-        ghinfo = sh(
-            "gh",
-            "pr",
-            "view",
-            e.pr,
-            "--json",
-            "baseRefName,headRefName,number,state,body,title,url",
+        ghinfo = get_command_output(
+            [
+                "gh",
+                "pr",
+                "view",
+                e.pr,
+                "--json",
+                "baseRefName,headRefName,number,state,body,title,url",
+            ]
         )
         d = json.loads(ghinfo)
         for required_field in ["state", "number", "baseRefName", "headRefName"]:
@@ -482,24 +479,28 @@ def verify(st: List[StackEntry], strict=False):
 def land_pr(e: StackEntry, remote: str, main_branch: str):
     log(b("Landing ") + e.pprint(), level=2)
     # Rebase the head branch to the most recent 'origin/main'
-    sh("git", "fetch", "--prune", remote)
-    sh(
-        "git",
-        "rebase",
-        f"{remote}/{main_branch}",
-        e.head,
-        "--committer-date-is-author-date",
+    run_shell_command(["git", "fetch", "--prune", remote])
+    run_shell_command(
+        [
+            "git",
+            "rebase",
+            f"{remote}/{main_branch}",
+            e.head,
+            "--committer-date-is-author-date",
+        ]
     )
-    sh("git", "push", remote, "-f", f"{e.head}:{e.head}")
+    run_shell_command(["git", "push", remote, "-f", f"{e.head}:{e.head}"])
 
     # Switch PR base branch to 'main'
-    sh(
-        "gh",
-        "pr",
-        "edit",
-        e.pr,
-        "-B",
-        main_branch,
+    run_shell_command(
+        [
+            "gh",
+            "pr",
+            "edit",
+            e.pr,
+            "-B",
+            main_branch,
+        ]
     )
 
     # Form the commit message: it should contain the original commit message
@@ -513,24 +514,19 @@ def land_pr(e: StackEntry, remote: str, main_branch: str):
     pr_body = "\n".join(lines[1:])
     if pr_body == "":
         pr_body = " "
-    sh(
-        "gh",
-        "pr",
-        "merge",
-        e.pr,
-        "--squash",
-        "-t",
-        title,
-        "-F",
-        "-",
-        input=pr_body,
+    run_shell_command(
+        ["gh", "pr", "merge", e.pr, "--squash", "-t", title, "-F", "-"],
+        shell=False,
+        input=pr_body.encode(),
     )
 
 
 def delete_branches(st: List[StackEntry], remote: str):
     for e in st:
-        sh("git", "branch", "-D", e.head, raise_on_err=False)
-        sh("git", "push", "-f", remote, f":{e.head}", raise_on_err=False)
+        run_shell_command(["git", "branch", "-D", e.head], check=False)
+        run_shell_command(
+            ["git", "push", "-f", remote, f":{e.head}"], check=False
+        )
 
 
 def print_stack(st: List[StackEntry], level=1):
@@ -570,26 +566,22 @@ def add_cross_links(st: List[StackEntry]):
 {body}
 """
 
-        sh(
-            "gh",
-            "pr",
-            "edit",
-            e.pr,
-            "-t",
-            title,
-            "-F",
-            "-",
-            "-B",
-            e.base,
-            input=pr_body,
+        run_shell_command(
+            ["gh", "pr", "edit", e.pr, "-t", title, "-F", "-", "-B", e.base],
+            shell=False,
+            input=pr_body.encode(),
         )
 
 
 def check_if_local_main_matches_origin(remote: str, main_branch: str):
     if not branch_exists(main_branch):
-        sh("git", "checkout", f"{remote}/{main_branch}", "-b", main_branch)
+        run_shell_command(
+            ["git", "checkout", f"{remote}/{main_branch}", "-b", main_branch]
+        )
 
-    diff = sh("git", "diff", main_branch, f"{remote}/{main_branch}")
+    diff = get_command_output(
+        ["git", "diff", main_branch, f"{remote}/{main_branch}"]
+    )
     if diff != "":
         error(
             f"""Local '{main_branch}' does not match '{remote}/{main_branch}'.
@@ -662,7 +654,9 @@ Please submit a bug!
     log(h("Updating remote branches"), level=1)
     for e in st:
         try:
-            sh("git", "push", args.remote, "-f", f"{e.head}:{e.head}")
+            run_shell_command(
+                ["git", "push", args.remote, "-f", f"{e.head}:{e.head}"]
+            )
         except RuntimeError as e:
             error(
                 f"""Couldn't push head branch to remote:
@@ -673,8 +667,8 @@ Please submit a bug!
             )
 
     log(h(f"Checking out the origin branch '{current_branch}'"), level=1)
-    sh("git", "checkout", current_branch)
-    sh("git", "reset", "--hard", st[-1].head)
+    run_shell_command(["git", "checkout", current_branch])
+    run_shell_command(["git", "reset", "--hard", st[-1].head])
 
     log(h("Adding cross-links to PRs"), level=1)
     add_cross_links(st)
@@ -705,14 +699,16 @@ def command_land(args):
 
     # TODO: Gracefully undo whatever possible if landing fails
 
-    sh("git", "fetch", "--prune", args.remote)
-    sh("git", "checkout", current_branch)
-    sh("git", "reset", "--hard", st[-1].head)
+    run_shell_command(["git", "fetch", "--prune", args.remote])
+    run_shell_command(["git", "checkout", current_branch])
+    run_shell_command(["git", "reset", "--hard", st[-1].head])
 
     log(h("Deleting local and remote branches"), level=1)
-    sh("git", "checkout", f"{args.remote}/{args.main_branch}")
+    run_shell_command(["git", "checkout", f"{args.remote}/{args.main_branch}"])
     delete_branches(st, args.remote)
-    sh("git", "rebase", f"{args.remote}/{args.main_branch}", args.main_branch)
+    run_shell_command(
+        ["git", "rebase", f"{args.remote}/{args.main_branch}", args.main_branch]
+    )
     log(h(blue("SUCCESS!")), level=1)
 
 
@@ -737,8 +733,8 @@ def command_abandon(args):
 
     log(h("Deleting local and remote branches"), level=1)
     last_branch = st[-1].head
-    sh("git", "checkout", current_branch)
-    sh("git", "reset", "--hard", st[-1].head)
+    run_shell_command(["git", "checkout", current_branch])
+    run_shell_command(["git", "reset", "--hard", st[-1].head])
 
     delete_branches(st, args.remote)
     log(h(blue("SUCCESS!")), level=1)
