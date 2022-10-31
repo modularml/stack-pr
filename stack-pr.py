@@ -83,8 +83,63 @@ RE_PR_TOC = re.compile(
     r"^Stacked PRs:\r?\n(^ \* (__->__)?#\d+\r?\n)*\r?\n", re.MULTILINE
 )
 
-# A global used to suppress shell commands output
-QUIET_MODE = False
+# ===----------------------------------------------------------------------=== #
+# Error message templates
+# ===----------------------------------------------------------------------=== #
+ERROR_CANT_UPDATE_META = """Couldn't update stack metadata for
+    {e}
+"""
+ERROR_CANT_CREATE_PR = """Could not create a new PR for:
+    {e}
+
+Failed trying to execute {cmd}
+"""
+ERROR_CANT_REBASE = """Could not rebase the PR on '{target}'. Failed to land PR:
+    {e}
+
+Failed trying to execute {cmd}
+"""
+ERROR_STACKINFO_MISSING = """A stack entry is missing some information:
+    {e}
+
+If you wanted to land a part of the stack, please use -B and -H options to
+specify base and head revisions.
+If you wanted to land the entire stack, please use 'submit' first.
+If you hit this error trying to submit, please report a bug!
+"""
+ERROR_STACKINFO_BAD_LINK = """Bad PR link in stack metadata!
+    {e}
+"""
+ERROR_STACKINFO_MALFORMED_RESPONSE = """Malformed response from GH!
+
+Returned json object is missing a field {required_field}
+PR info from github: {d}
+
+Failed verification for:
+     {e}
+"""
+ERROR_STACKINFO_PR_NOT_OPEN = """Associated PR is not in 'OPEN' state!
+     {e}
+
+PR info from github: {d}
+"""
+ERROR_STACKINFO_PR_NUMBER_MISMATCH = """PR number on github mismatches PR number in stack metadata!
+     {e}
+
+PR info from github: {d}
+"""
+ERROR_STACKINFO_PR_HEAD_MISMATCH = """Head branch name on github mismatches head branch name in stack metadata!
+     {e}
+
+PR info from github: {d}
+"""
+ERROR_STACKINFO_PR_BASE_MISMATCH = """Base branch name on github mismatches base branch name in stack metadata!
+     {e}
+
+If you are trying land the stack, please update it first by calling 'submit'.
+
+PR info from github: {d}
+"""
 
 # ===----------------------------------------------------------------------=== #
 # Class to work with git commit contents
@@ -181,19 +236,7 @@ class StackEntry:
         return s
 
     def __repr__(self):
-        s = ""
-        s += "\nCommit: "
-        if self.commit:
-            s += self.commit.commit_id()[:12] + "\n"
-            s += self.commit.commit_msg() + "\n"
-        else:
-            s += "None\n"
-        if self.pr:
-            s += f"PR: {self.pr}\n"
-        else:
-            s += "PR: None\n"
-        s += f"{self.head} --> {self.base}\n"
-        return s
+        return self.pprint()
 
     def read_metadata(self):
         self.commit.commit_msg()
@@ -202,53 +245,6 @@ class StackEntry:
             return
         self.pr = x.group(1)
         self.head = x.group(2)
-
-    def add_or_update_metadata(self):
-        m = self.commit.commit_msg()
-        x = RE_STACK_INFO_LINE.search(m)
-        needs_update = False
-        if x:
-            if self.pr != x.group(1) or self.head != x.group(2):
-                needs_update = True
-        if not x:
-            m += "\n\nstack-info: PR: xxx, branch: xxx"
-            needs_update = True
-
-        run_shell_command(
-            [
-                "git",
-                "rebase",
-                self.base,
-                self.head,
-                "--committer-date-is-author-date",
-            ]
-        )
-        if needs_update:
-            m = RE_STACK_INFO_LINE.sub(
-                f"\nstack-info: PR: {self.pr}, branch: {self.head}", m
-            )
-            run_shell_command(
-                ["git", "commit", "--amend", "-F", "-"],
-                shell=False,
-                input=m.encode(),
-            )
-
-    def strip_metadata(self):
-        m = self.commit.commit_msg()
-        x = RE_STACK_INFO_LINE.search(m)
-        if not x:
-            return
-
-        m = RE_STACK_INFO_LINE.sub("", m)
-        run_shell_command(["git", "checkout", self.head])
-        run_shell_command(
-            ["git", "rebase", self.base, "--committer-date-is-author-date"]
-        )
-        run_shell_command(
-            ["git", "commit", "--amend", "-F", "-"],
-            shell=False,
-            input=m.encode(),
-        )
 
 
 # ===----------------------------------------------------------------------=== #
@@ -289,14 +285,17 @@ def red(s: str):
 
 
 def error(msg):
-    print(red("ERROR: ") + msg)
-    exit(1)
+    print(red("\nERROR: ") + msg + "\nPlease file a bug!")
 
 
+# TODO: replace this with modular.utils.logging
 def log(msg, level=0):
     print(msg)
 
 
+# ===----------------------------------------------------------------------=== #
+# Common utility functions
+# ===----------------------------------------------------------------------=== #
 def split_header(s: str) -> List[CommitHeader]:
     return list(map(CommitHeader, s.split("\0")[:-1]))
 
@@ -309,49 +308,36 @@ def is_valid_ref(ref: str) -> bool:
         return splits[-2] == "stack" and splits[-1].isnumeric()
 
 
-def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
-    log(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")), level=1)
-    r = get_command_output(
-        [
-            "gh",
-            "pr",
-            "create",
-            "-B",
-            e.base,
-            "-H",
-            e.head,
-            "-t",
-            e.commit.title(),
-            "-F",
-            "-",
-            *((["--reviewer", reviewer]) if reviewer != "" else ()),
-            *((["--draft"]) if is_draft else ()),
-        ],
-        shell=False,
-        input=e.commit.commit_msg().encode(),
-    )
-    log(b("Created: ") + r, level=2)
-    return r.split()[-1]
+def last(ref: str, sep: str = "/") -> str:
+    return ref.rsplit("/", 1)[1]
 
 
-def get_stack(remote: str, main_branch: str) -> List[StackEntry]:
-    # Find merge base.
-    run_shell_command(["git", "fetch", "--prune", remote])
-    base = get_command_output(
-        ["git", "merge-base", f"{remote}/{main_branch}", "HEAD"]
+# TODO: Move to 'modular.utils.git'
+def is_ancestor(commit1: str, commit2: str) -> bool:
+    """
+    Returns true if 'commit1' is an ancestor of 'commit2'.
+    """
+    # TODO: We need to check returncode of this command more carefully, as the
+    # command simply might fail (rc != 0 and rc != 1).
+    p = run_shell_command(
+        ["git", "merge-base", "--is-ancestor", commit1, commit2], check=False
     )
-    base_obj = split_header(
-        get_command_output(
-            ["git", "rev-list", "--header", "^" + base + "^@", base]
+    return p.returncode == 0
+
+
+def get_stack(base: str, head: str) -> List[StackEntry]:
+    if not is_ancestor(base, head):
+        error(
+            f"{base} is not an ancestor of {head}.\nCould not find commits for the stack."
         )
-    )[0]
+        exit(1)
 
     # Find list of commits since merge base.
     st: List[StackEntry] = []
     stack = (
         split_header(
             get_command_output(
-                ["git", "rev-list", "--header", "^" + base, "HEAD"]
+                ["git", "rev-list", "--header", "^" + base, head]
             )
         )
     )[::-1]
@@ -366,71 +352,22 @@ def get_stack(remote: str, main_branch: str) -> List[StackEntry]:
     return st
 
 
-def set_base_branches(st: List[StackEntry], main_branch: str):
-    prev_branch = main_branch
+def set_base_branches(st: List[StackEntry], target: str):
+    prev_branch = target
     for e in st:
-        e.base = prev_branch
-        prev_branch = e.head
+        e.base, prev_branch = prev_branch, e.head
 
 
-def init_branch(e: StackEntry, remote: str):
-    if e.head:
-        log(h(f"Resetting branch {e.head}"), level=2)
-        run_shell_command(["git", "checkout", e.head])
-        run_shell_command(["git", "reset", "--hard", e.commit.commit_id()])
-        return
-
-    username = get_gh_username()
-
-    refs = get_command_output(
-        [
-            "git",
-            "for-each-ref",
-            f"refs/remotes/{remote}/{username}/stack",
-            "--format='%(refname)'",
-        ]
-    ).split()
-
-    refs = list(filter(is_valid_ref, refs))
-    max_ref_num = max(int(ref.split("/")[-1]) for ref in refs) if refs else 0
-    new_branch_id = max_ref_num + 1
-
-    e.head = f"{username}/stack/{new_branch_id}"
-
-    log(h(f"Creating branch {e.head}"), level=2)
-    try:
-        if branch_exists(e.head):
-            run_shell_command(["git", "branch", "-D", e.head])
-        run_shell_command(
-            ["git", "checkout", e.commit.commit_id(), "-b", e.head]
-        )
-    except RuntimeError as ex:
-        msg = f"Could not create local branch {e.head}!\n"
-        msg += "This usually happens if stack-pr fails to cleanup after landing a PR. Sorry!\n"
-        msg += "To fix this, please manually delete this branch from your local repo and try again:\n"
-        msg += f"\n    git branch -D {e.head}\n"
-        msg += "\nPlease file a bug!"
-        raise RuntimeError(msg)
-    run_shell_command(["git", "push", remote, f"{e.head}:{e.head}"])
-
-
-def verify(st: List[StackEntry], strict=False):
+def verify(st: List[StackEntry], check_base: bool = False):
     log(h("Verifying stack info"), level=1)
     for e in st:
-        if e.pr == None or e.head == None or e.base == None:
-            if strict:
-                msg = "A stack entry is missing some information:"
-                msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-                msg += "\nPlease file a bug!"
-                raise RuntimeError(msg)
-            else:
-                continue
+        if e.pr is None or e.head is None or e.base is None:
+            error(ERROR_STACKINFO_MISSING.format(**locals()))
+            raise RuntimeError
 
-        if len(e.pr.split("/")) == 0 or not e.pr.split("/")[-1].isnumeric():
-            msg = "Bad PR link in stack metadata!"
-            msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-            msg += "\nPlease file a bug!"
-            raise RuntimeError(msg)
+        if len(e.pr.split("/")) == 0 or not last(e.pr).isnumeric():
+            error(ERROR_STACKINFO_BAD_LINK.format(**locals()))
+            raise RuntimeError
 
         ghinfo = get_command_output(
             [
@@ -445,100 +382,156 @@ def verify(st: List[StackEntry], strict=False):
         d = json.loads(ghinfo)
         for required_field in ["state", "number", "baseRefName", "headRefName"]:
             if required_field not in d:
-                msg = "Malformed response from GH!"
-                msg += (
-                    f"Returned json object is missing a field {required_field}"
-                )
-                msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-                msg += "PR info from github: " + str(d)
-                msg += "\nPlease file a bug!"
-                raise RuntimeError(msg)
+                error(ERROR_STACKINFO_MALFORMED_RESPONSE.format(**locals()))
+                raise RuntimeError
 
         if d["state"] != "OPEN":
-            msg = "Associated PR is not in 'OPEN' state!"
-            msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-            msg += "PR info from github: " + str(d)
-            msg += "\nPlease file a bug!"
-            raise RuntimeError(msg)
+            error(ERROR_STACKINFO_PR_NOT_OPEN.format(**locals()))
+            raise RuntimeError
 
-        if int(e.pr.split("/")[-1]) != int(d["number"]):
-            msg = "PR number on github mismatches PR number in stack metadata!"
-            msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-            msg += "PR info from github: " + str(d)
-            msg += "\nPlease file a bug!"
-            raise RuntimeError(msg)
+        if int(last(e.pr)) != d["number"]:
+            error(ERROR_STACKINFO_PR_NUMBER_MISMATCH.format(**locals()))
+            raise RuntimeError
 
         if e.head != d["headRefName"]:
-            msg = "Head branch name on github mismatches head branch name in stack metadata!"
-            msg += f"Commit: {e.commit.commit_id()}, PR: {e.pr}, head: {e.head}, base: {e.base}"
-            msg += "PR info from github: " + str(d)
-            msg += "\nPlease file a bug!"
-            raise RuntimeError(msg)
+            error(ERROR_STACKINFO_PR_HEAD_MISMATCH.format(**locals()))
+            raise RuntimeError
 
-
-def land_pr(e: StackEntry, remote: str, main_branch: str):
-    log(b("Landing ") + e.pprint(), level=2)
-    # Rebase the head branch to the most recent 'origin/main'
-    run_shell_command(["git", "fetch", "--prune", remote])
-    run_shell_command(
-        [
-            "git",
-            "rebase",
-            f"{remote}/{main_branch}",
-            e.head,
-            "--committer-date-is-author-date",
-        ]
-    )
-    run_shell_command(["git", "push", remote, "-f", f"{e.head}:{e.head}"])
-
-    # Switch PR base branch to 'main'
-    run_shell_command(
-        [
-            "gh",
-            "pr",
-            "edit",
-            e.pr,
-            "-B",
-            main_branch,
-        ]
-    )
-
-    # Form the commit message: it should contain the original commit message
-    # and nothing else.
-    pr_body = RE_STACK_INFO_LINE.sub("", e.commit.commit_msg())
-
-    # Since title is passed separately, we need to strip the first line from the body:
-    lines = pr_body.split("\n")
-    pr_id = e.pr.split("/")[-1]
-    title = lines[0] + f" (#{pr_id})"
-    pr_body = "\n".join(lines[1:])
-    if pr_body == "":
-        pr_body = " "
-    run_shell_command(
-        ["gh", "pr", "merge", e.pr, "--squash", "-t", title, "-F", "-"],
-        shell=False,
-        input=pr_body.encode(),
-    )
-
-
-def delete_branches(st: List[StackEntry], remote: str):
-    for e in st:
-        run_shell_command(["git", "branch", "-D", e.head], check=False)
-        run_shell_command(
-            ["git", "push", "-f", remote, f":{e.head}"], check=False
-        )
+        # 'Base' branch might diverge when the stack is modified (e.g. when a
+        # new commit is added to the middle of the stack). It is not an issue
+        # if we're updating the stack (i.e. in 'submit'), but it is an issue if
+        # we are trying to land it.
+        if check_base and e.base != d["baseRefName"]:
+            error(ERROR_STACKINFO_PR_BASE_MISMATCH.format(**locals()))
+            raise RuntimeError
 
 
 def print_stack(st: List[StackEntry], level=1):
     log(b("Stack:"), level=level)
-    for e in st[::-1]:
+    for e in reversed(st):
         log("   * " + e.pprint(), level=level)
+
+
+# ===----------------------------------------------------------------------=== #
+# SUBMIT
+# ===----------------------------------------------------------------------=== #
+def add_or_update_metadata(e: StackEntry, needs_rebase: bool) -> bool:
+    if needs_rebase:
+        run_shell_command(
+            [
+                "git",
+                "rebase",
+                e.base,
+                e.head,
+                "--committer-date-is-author-date",
+            ]
+        )
+    else:
+        run_shell_command(["git", "checkout", e.head])
+
+    commit_msg = e.commit.commit_msg()
+    found_metadata = RE_STACK_INFO_LINE.search(commit_msg)
+    if found_metadata:
+        # Metadata is already there, skip this commit
+        return needs_rebase
+
+    # Add the stack info metadata to the commit message
+    commit_msg += f"\n\nstack-info: PR: {e.pr}, branch: {e.head}"
+    run_shell_command(
+        ["git", "commit", "--amend", "-F", "-"],
+        shell=False,
+        input=commit_msg.encode(),
+    )
+    return True
+
+
+def get_available_branch_name(remote: str) -> str:
+    username = get_gh_username()
+
+    refs = get_command_output(
+        [
+            "git",
+            "for-each-ref",
+            f"refs/remotes/{remote}/{username}/stack",
+            "--format='%(refname)'",
+        ]
+    ).split()
+
+    max_ref_num = (
+        max(int(last(ref)) for ref in filter(is_valid_ref, refs)) if refs else 0
+    )
+    new_branch_id = max_ref_num + 1
+
+    return f"{username}/stack/{new_branch_id}"
+
+
+def get_next_available_branch_name(name: str) -> str:
+    base, id = name.rsplit("/", 1)
+    return f"{base}/{int(id) + 1}"
+
+
+def init_local_branches(st: List[StackEntry], remote):
+    log(h(f"Initializing local branches"), level=1)
+    run_shell_command(["git", "fetch", "--prune", remote])
+    available_name = get_available_branch_name(remote)
+    for e in st:
+        if not e.head:
+            e.head = available_name
+            available_name = get_next_available_branch_name(available_name)
+
+        run_shell_command(
+            ["git", "checkout", e.commit.commit_id(), "-B", e.head]
+        )
+
+
+def push_branches(st: List[StackEntry], remote):
+    log(h("Updating remote branches"), level=1)
+    cmd = ["git", "push", "-f", remote]
+    cmd.extend([f"{e.head}:{e.head}" for e in st])
+    run_shell_command(cmd)
+
+
+def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
+    # Don't do anything if the PR already exists
+    if e.pr:
+        return
+    log(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")), level=1)
+    cmd = [
+        "gh",
+        "pr",
+        "create",
+        "-B",
+        e.base,
+        "-H",
+        e.head,
+        "-t",
+        e.commit.title(),
+        "-F",
+        "-",
+    ]
+    if reviewer:
+        cmd.extend(["--reviewer", reviewer])
+    if is_draft:
+        cmd.append("--draft")
+
+    try:
+        r = get_command_output(
+            cmd,
+            shell=False,
+            input=e.commit.commit_msg().encode(),
+        )
+    except Exception:
+        error(ERROR_CANT_CREATE_PR.format(**locals()))
+        raise
+
+    log(b("Created: ") + r, level=2)
+    e.pr = r.split()[-1]
 
 
 def generate_toc(st: List[StackEntry], current: int):
     res = "Stacked PRs:\n"
     for e in st[::-1]:
-        pr_id = e.pr.split("/")[-1]
+        pr_id = last(e.pr)
         arrow = ""
         if pr_id == current:
             arrow = "__->__"
@@ -549,14 +542,14 @@ def generate_toc(st: List[StackEntry], current: int):
 
 def add_cross_links(st: List[StackEntry]):
     for e in st:
-        pr_id = e.pr.split("/")[-1]
+        pr_id = last(e.pr)
         pr_toc = generate_toc(st, pr_id)
 
         title = e.commit.title()
         body = e.commit.commit_msg()
 
         # Strip title from the body - we will print it separately.
-        body = "\n".join(body.split("\n")[1:])
+        body = "\n".join(body.splitlines()[1:])
 
         # Strip stack-info from the body, nothing interesting there.
         body = RE_STACK_INFO_LINE.sub("", body)
@@ -573,106 +566,148 @@ def add_cross_links(st: List[StackEntry]):
         )
 
 
-def check_if_local_main_matches_origin(remote: str, main_branch: str):
-    if not branch_exists(main_branch):
-        run_shell_command(
-            ["git", "checkout", f"{remote}/{main_branch}", "-b", main_branch]
-        )
-
-    diff = get_command_output(
-        ["git", "diff", main_branch, f"{remote}/{main_branch}"]
-    )
-    if diff != "":
-        error(
-            f"""Local '{main_branch}' does not match '{remote}/{main_branch}'.
-
-Please fix that before submitting a stack:
-
-    # Save the current '{main_branch}' branch:
-    git checkout {main_branch} -b tmp_branch
-
-    # Reset local '{main_branch}' to '{remote}/{main_branch}'
-    git checkout {main_branch}
-    git reset --hard {remote}/{main_branch}
-"""
-        )
-
-
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
 def command_submit(args):
     log(h("SUBMIT"), level=1)
-    # TODO: we should only care that local 'main' exists and stack commits can
-    # be applied to it.
-    # Divergence with 'origin/commit' should not be considered at 'submit' step
-    # - it only matters for 'land'
-    check_if_local_main_matches_origin(args.remote, args.main_branch)
-
-    st = get_stack(args.remote, args.main_branch)
-    print_stack(st)
-    if not st:
-        log(h(blue("SUCCESS!")), level=1)
-        return
 
     current_branch = get_current_branch_name()
 
+    # Determine what commits belong to the stack
+    st = get_stack(args.base, args.head)
+    if not st:
+        log(h("Empty stack!"), level=1)
+        log(h(blue("SUCCESS!")), level=1)
+        return
+
+    # Create local branches and initialize base and head fields in the stack
+    # elements
+    init_local_branches(st, args.remote)
+    set_base_branches(st, args.target)
+    print_stack(st)
+
+    # If the current branch contains commits from the stack, we will need to
+    # rebase it in the end since the commits will be modified.
+    top_branch = st[-1].head
+    need_to_rebase_current = is_ancestor(top_branch, current_branch)
+
+    # Push local branches to remote
+    push_branches(st, args.remote)
+
+    # Now we have all the branches, so we can create the corresponding PRs
+    log(h("Submitting PRs"), level=1)
     for e in st:
-        init_branch(e, args.remote)
+        create_pr(e, args.draft, args.reviewer)
 
-    set_base_branches(st, args.main_branch)
+    # Verify consistency in everything we have so far
+    verify(st)
 
-    for e in st:
-        if e.pr == None:
-            try:
-                e.pr = create_pr(e, args.draft, args.reviewer)
-            except RuntimeError as e:
-                error(
-                    f"""Couldn't create a PR for
-    {e.pprint()}
-
-Please submit a bug!
-"""
-                )
-
-    verify(st, strict=True)
-
-    # Start writing out changes.
+    # Embed stack-info into commit messages
     log(h("Updating commit messages with stack metadata"), level=1)
+    needs_rebase = False
     for e in st:
         try:
-            e.add_or_update_metadata()
-        except RuntimeError as e:
-            error(
-                f"""Couldn't update stack metadata for
-    {e.pprint()}
+            needs_rebase = add_or_update_metadata(e, needs_rebase)
+        except Exception:
+            error(ERROR_CANT_UPDATE_META.format(**locals()))
+            raise
 
-Please submit a bug!
-"""
-            )
-
-    log(h("Updating remote branches"), level=1)
-    for e in st:
-        try:
-            run_shell_command(
-                ["git", "push", args.remote, "-f", f"{e.head}:{e.head}"]
-            )
-        except RuntimeError as e:
-            error(
-                f"""Couldn't push head branch to remote:
-    {e.pprint()}
-
-Please submit a bug!
-"""
-            )
-
-    log(h(f"Checking out the origin branch '{current_branch}'"), level=1)
-    run_shell_command(["git", "checkout", current_branch])
-    run_shell_command(["git", "reset", "--hard", st[-1].head])
+    push_branches(st, args.remote)
 
     log(h("Adding cross-links to PRs"), level=1)
     add_cross_links(st)
+
+    if need_to_rebase_current:
+        log(h(f"Rebasing the original branch '{current_branch}'"), level=1)
+        run_shell_command(
+            [
+                "git",
+                "rebase",
+                top_branch,
+                current_branch,
+                "--committer-date-is-author-date",
+            ]
+        )
+    else:
+        log(h(f"Checking out the original branch '{current_branch}'"), level=1)
+        run_shell_command(["git", "checkout", current_branch])
+
     log(h(blue("SUCCESS!")), level=1)
+
+
+# ===----------------------------------------------------------------------=== #
+# LAND
+# ===----------------------------------------------------------------------=== #
+def land_pr(e: StackEntry, remote: str, target: str):
+    log(b("Landing ") + e.pprint(), level=2)
+    # Rebase the head branch to the most recent 'origin/main'
+    run_shell_command(["git", "fetch", "--prune", remote])
+    cmd = [
+        "git",
+        "rebase",
+        f"{remote}/{target}",
+        e.head,
+        "--committer-date-is-author-date",
+    ]
+    try:
+        run_shell_command(cmd)
+    except Exception:
+        error(ERROR_CANT_REBASE.format(**locals()))
+        raise
+    run_shell_command(["git", "push", remote, "-f", f"{e.head}:{e.head}"])
+
+    # Switch PR base branch to 'main'
+    run_shell_command(
+        [
+            "gh",
+            "pr",
+            "edit",
+            e.pr,
+            "-B",
+            target,
+        ]
+    )
+
+    # Form the commit message: it should contain the original commit message
+    # and nothing else.
+    pr_body = RE_STACK_INFO_LINE.sub("", e.commit.commit_msg())
+
+    # Since title is passed separately, we need to strip the first line from the body:
+    lines = pr_body.splitlines()
+    pr_id = last(e.pr)
+    title = f"{lines[0]} (#{pr_id})"
+    pr_body = "\n".join(lines[1:]) or " "
+    run_shell_command(
+        ["gh", "pr", "merge", e.pr, "--squash", "-t", title, "-F", "-"],
+        shell=False,
+        input=pr_body.encode(),
+    )
+
+
+def delete_branches(st: List[StackEntry], remote: str):
+    # Delete local branches
+    cmd = ["git", "branch", "-D"]
+    cmd.extend([e.head for e in st if e.head])
+    run_shell_command(cmd, check=False)
+
+    # Delete remote branches
+    username = get_gh_username()
+    refs = get_command_output(
+        [
+            "git",
+            "for-each-ref",
+            f"refs/remotes/{remote}/{username}/stack",
+            "--format='%(refname)'",
+        ]
+    ).split()
+    refs = [x.replace(f"refs/remotes/{remote}/", "") for x in refs]
+    remote_branches_to_delete = [e.head for e in st if e.head in refs]
+
+    if remote_branches_to_delete:
+        cmd = ["git", "push", "-f", remote]
+        cmd.extend([f":{branch}" for branch in remote_branches_to_delete])
+        run_shell_command(cmd, check=False)
 
 
 # ===----------------------------------------------------------------------=== #
@@ -680,36 +715,66 @@ Please submit a bug!
 # ===----------------------------------------------------------------------=== #
 def command_land(args):
     log(h("LAND"), level=1)
-    check_if_local_main_matches_origin(args.remote, args.main_branch)
-    st = get_stack(args.remote, args.main_branch)
 
-    set_base_branches(st, args.main_branch)
-    print_stack(st)
+    # Determine what commits belong to the stack
+    st = get_stack(args.base, args.head)
     if not st:
+        log(h("Empty stack!"), level=1)
         log(h(blue("SUCCESS!")), level=1)
         return
 
+    # Initialize base branches of elements in the stack. Head branches should
+    # already be there from the metadata that commits need to have by that
+    # point.
+    set_base_branches(st, args.target)
+    print_stack(st)
+
     current_branch = get_current_branch_name()
 
-    verify(st)
+    # Verify that the stack is correct before trying to land it.
+    verify(st, check_base=True)
 
     # All good, land!
     for e in st:
-        land_pr(e, args.remote, args.main_branch)
+        land_pr(e, args.remote, args.target)
 
-    # TODO: Gracefully undo whatever possible if landing fails
-
+    # Delete local and remote stack branches
     run_shell_command(["git", "fetch", "--prune", args.remote])
     run_shell_command(["git", "checkout", current_branch])
-    run_shell_command(["git", "reset", "--hard", st[-1].head])
 
     log(h("Deleting local and remote branches"), level=1)
-    run_shell_command(["git", "checkout", f"{args.remote}/{args.main_branch}"])
     delete_branches(st, args.remote)
+
+    # If local branch {target} exists, rebase it on the remote/target
+    if branch_exists(args.target):
+        run_shell_command(
+            ["git", "rebase", f"{args.remote}/{args.target}", args.target]
+        )
     run_shell_command(
-        ["git", "rebase", f"{args.remote}/{args.main_branch}", args.main_branch]
+        ["git", "rebase", f"{args.remote}/{args.target}", current_branch]
     )
+
     log(h(blue("SUCCESS!")), level=1)
+
+
+# ===----------------------------------------------------------------------=== #
+# ABANDON
+# ===----------------------------------------------------------------------=== #
+def strip_metadata(e: StackEntry) -> str:
+    m = e.commit.commit_msg()
+
+    m = RE_STACK_INFO_LINE.sub("", m)
+    run_shell_command(
+        ["git", "rebase", e.base, e.head, "--committer-date-is-author-date"]
+    )
+    run_shell_command(
+        ["git", "commit", "--amend", "-F", "-"],
+        shell=False,
+        input=m.encode(),
+    )
+
+    new_hash = get_command_output(["git", "rev-parse", e.head], shell=False)
+    return new_hash
 
 
 # ===----------------------------------------------------------------------=== #
@@ -717,25 +782,30 @@ def command_land(args):
 # ===----------------------------------------------------------------------=== #
 def command_abandon(args):
     log(h("ABANDON"), level=1)
-    check_if_local_main_matches_origin(args.remote, args.main_branch)
-    st = get_stack(args.remote, args.main_branch)
-
-    set_base_branches(st, args.main_branch)
-    print_stack(st)
+    st = get_stack(args.base, args.head)
     if not st:
+        log(h("Empty stack!"), level=1)
         log(h(blue("SUCCESS!")), level=1)
         return
     current_branch = get_current_branch_name()
 
+    init_local_branches(st, args.remote)
+    set_base_branches(st, args.target)
+    print_stack(st)
+    need_to_rebase_current = is_ancestor(
+        st[-1].commit.commit_id(), current_branch
+    )
+
     log(h("Stripping stack metadata from commit messages"), level=1)
+
+    last_hash = ""
     for e in st:
-        e.strip_metadata()
+        last_hash = strip_metadata(e)
+
+    log(h("Rebasing the current branch on top of updated top branch"), level=1)
+    run_shell_command(["git", "rebase", last_hash, current_branch], shell=False)
 
     log(h("Deleting local and remote branches"), level=1)
-    last_branch = st[-1].head
-    run_shell_command(["git", "checkout", current_branch])
-    run_shell_command(["git", "reset", "--hard", st[-1].head])
-
     delete_branches(st, args.remote)
     log(h(blue("SUCCESS!")), level=1)
 
@@ -745,10 +815,9 @@ def command_abandon(args):
 # ===----------------------------------------------------------------------=== #
 def command_view(args):
     log(h("VIEW"), level=1)
-    check_if_local_main_matches_origin(args.remote, args.main_branch)
-    st = get_stack(args.remote, args.main_branch)
+    st = get_stack(args.base, args.head)
 
-    set_base_branches(st, args.main_branch)
+    set_base_branches(st, args.target)
     print_stack(st)
     log(h(blue("SUCCESS!")), level=1)
 
@@ -757,18 +826,21 @@ def command_view(args):
 # Main entry point
 # ===----------------------------------------------------------------------=== #
 def main():
-    global QUIET_MODE
     parser = argparse.ArgumentParser()
+    parser.add_argument("-R", "--remote", default="origin", help="Remote name")
+    parser.add_argument(
+        "-B", "--base", default="main", help="Local base branch"
+    )
+    parser.add_argument(
+        "-H", "--head", default="HEAD", help="Local head branch"
+    )
+    parser.add_argument(
+        "-T", "--target", default="main", help="Remote target branch"
+    )
 
     subparsers = parser.add_subparsers(help="sub-command help", dest="command")
     parser_submit = subparsers.add_parser(
         "submit", help="Submit a stack of PRs"
-    )
-    parser_submit.add_argument(
-        "--main-branch", default="main", help="Target branch"
-    )
-    parser_submit.add_argument(
-        "-R", "--remote", default="origin", help="Remote name"
     )
     parser_submit.add_argument(
         "-d",
@@ -782,80 +854,37 @@ def main():
         default=os.getenv("STACK_PR_DEFAULT_REVIEWER", default=""),
         help="List of reviewers for the PR",
     )
-    parser_submit.add_argument(
-        "-q",
-        "--quiet",
-        action="store_false",
-        default=True,
-        help="Supress shell commands output",
-    )
 
     parser_land = subparsers.add_parser("land", help="Land the current stack")
-    parser_land.add_argument(
-        "--main-branch", default="main", help="Target branch"
-    )
-    parser_land.add_argument(
-        "-R", "--remote", default="origin", help="Remote name"
-    )
-    parser_land.add_argument(
-        "-q",
-        "--quiet",
-        action="store_false",
-        default=True,
-        help="Supress shell commands output",
-    )
 
     parser_abandon = subparsers.add_parser(
         "abandon", help="Abandon the current stack"
-    )
-    parser_abandon.add_argument(
-        "--main-branch", default="main", help="Target branch"
-    )
-    parser_abandon.add_argument(
-        "-R", "--remote", default="origin", help="Remote name"
-    )
-    parser_abandon.add_argument(
-        "--head-branch-name", default="stack-head", help="Result branch name"
-    )
-    parser_abandon.add_argument(
-        "-q",
-        "--quiet",
-        action="store_false",
-        default=True,
-        help="Supress shell commands output",
     )
 
     parser_view = subparsers.add_parser(
         "view", help="Inspect the current stack"
     )
-    parser_view.add_argument(
-        "--main-branch", default="main", help="Target branch"
-    )
-    parser_view.add_argument(
-        "-R", "--remote", default="origin", help="Remote name"
-    )
-    parser_view.add_argument(
-        "-q",
-        "--quiet",
-        action="store_false",
-        default=True,
-        help="Supress shell commands output",
-    )
 
     args, unknown = parser.parse_known_args()
-    if args.quiet:
-        QUIET_MODE = True
 
     check_gh_installed()
 
-    if args.command == "submit":
-        command_submit(args)
-    elif args.command == "land":
-        command_land(args)
-    elif args.command == "abandon":
-        command_abandon(args)
-    elif args.command == "view":
-        command_view(args)
+    current_branch = get_current_branch_name()
+    try:
+        if args.command == "submit":
+            command_submit(args)
+        elif args.command == "land":
+            command_land(args)
+        elif args.command == "abandon":
+            command_abandon(args)
+        elif args.command == "view":
+            command_view(args)
+        else:
+            raise Exception(f"Unknown command {args.command}")
+    except Exception:
+        # If something failed, checkout the original branch
+        run_shell_command(["git", "checkout", current_branch])
+        raise
 
 
 if __name__ == "__main__":
