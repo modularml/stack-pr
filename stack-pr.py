@@ -562,6 +562,38 @@ def add_cross_links(st: List[StackEntry]):
         )
 
 
+# Temporarily set base branches of existing PRs to the bottom of the stack.
+# This needs to be done to avoid PRs getting closed when commits are
+# rearranged.
+#
+# For instance, if we first had
+#
+# Stack:
+#    * #2 (stack/2 -> stack/1)  aaaa
+#    * #1 (stack/1 -> main)     bbbb
+#
+# And then swapped the order of the commits locally and tried submitting again
+# we would have:
+#
+# Stack:
+#    * #1 (stack/1 -> main)     bbbb
+#    * #2 (stack/2 -> stack/1)  aaaa
+#
+# Now we need to 1) change bases of the PRs, 2) push branches stack/1 and
+# stack/2. If we push stack/1, then PR #2 gets automatically closed, since its
+# head branch will contain all the commits from its base branch.
+#
+# To avoid this, we temporarily set all base branches to point to 'main' - once
+# all the branches are pushed we can set the actual base branches.
+def reset_remote_base_branches(st: List[StackEntry], target: str):
+    log(h("Resetting remote base branches"), level=1)
+    for e in st:
+        if e.pr:
+            run_shell_command(
+                ["gh", "pr", "edit", e.pr, "-B", target], shell=False
+            )
+
+
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
@@ -587,6 +619,8 @@ def command_submit(args):
     # rebase it in the end since the commits will be modified.
     top_branch = st[-1].head
     need_to_rebase_current = is_ancestor(top_branch, current_branch)
+
+    reset_remote_base_branches(st, args.target)
 
     # Push local branches to remote
     push_branches(st, args.remote)
