@@ -797,6 +797,8 @@ def delete_branches(st: List[StackEntry], remote: str):
 def command_land(args):
     log(h("LAND"), level=1)
 
+    current_branch = get_current_branch_name()
+
     if should_update_local_base(args.base, args.remote, args.target):
         update_local_base(args.base, args.remote, args.target)
         run_shell_command(["git", "checkout", current_branch])
@@ -813,8 +815,6 @@ def command_land(args):
     # point.
     set_base_branches(st, args.target)
     print_stack(st)
-
-    current_branch = get_current_branch_name()
 
     # Verify that the stack is correct before trying to land it.
     verify(st, check_base=True)
