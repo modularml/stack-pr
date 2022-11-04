@@ -136,6 +136,10 @@ If you are trying land the stack, please update it first by calling 'submit'.
 
 PR info from github: {d}
 """
+ERROR_REPO_DIRTY = """There are uncommitted changes.
+
+Please commit or stash them before working with stacks.
+"""
 
 # ===----------------------------------------------------------------------=== #
 # Class to work with git commit contents
@@ -281,7 +285,7 @@ def red(s: str):
 
 
 def error(msg):
-    print(red("\nERROR: ") + msg + "\nPlease file a bug!")
+    print(red("\nERROR: ") + msg)
 
 
 # TODO: replace this with modular.utils.logging
@@ -318,6 +322,19 @@ def is_ancestor(commit1: str, commit2: str) -> bool:
     p = run_shell_command(
         ["git", "merge-base", "--is-ancestor", commit1, commit2], check=False
     )
+    return p.returncode == 0
+
+
+# TODO: Move to 'modular.utils.git'
+def is_repo_clean() -> bool:
+    """
+    Returns true if there are no uncommitted changes in the repo.
+    """
+    p = run_shell_command(
+        ["git", "diff", "--quiet", "--exit-code"], check=False
+    )
+
+    assert p.returncode in [0, 1]
     return p.returncode == 0
 
 
@@ -898,6 +915,9 @@ def main():
     args, unknown = parser.parse_known_args()
 
     check_gh_installed()
+    if not is_repo_clean():
+        error(ERROR_REPO_DIRTY)
+        return
 
     current_branch = get_current_branch_name()
     try:
