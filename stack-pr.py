@@ -946,7 +946,7 @@ def main():
 
     subparsers = parser.add_subparsers(help="sub-command help", dest="command")
     parser_submit = subparsers.add_parser(
-        "submit", help="Submit a stack of PRs"
+        "submit", aliases=["export"], help="Submit a stack of PRs"
     )
     parser_submit.add_argument(
         "-d",
@@ -980,7 +980,7 @@ def main():
 
     current_branch = get_current_branch_name()
     try:
-        if args.command == "submit":
+        if args.command in ["submit", "export"]:
             command_submit(args)
         elif args.command == "land":
             command_land(args)
