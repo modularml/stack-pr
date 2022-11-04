@@ -611,6 +611,36 @@ def reset_remote_base_branches(st: List[StackEntry], target: str):
             )
 
 
+# If local 'main' lags behind 'origin/main', we can just move it forward.
+#
+# It is a common user mistake to not update their local branch, run 'submit',
+# and end up with a huge stack of changes that are already merged.
+# We could've told users to update their local branch in that scenario, but why
+# not to do it for them?
+# In the very unlikely case when they indeed wanted to include changes that are
+# already in remote into their stack, they can use a different notation for the
+# base (e.g. explicit hash of the commit) - but most probably nobody ever would
+# need that.
+def should_update_local_base(base: str, remote: str, target: str):
+    base_hash = get_command_output(["git", "rev-parse", base], shell=False)
+    target_hash = get_command_output(
+        ["git", "rev-parse", f"{remote}/{target}"], shell=False
+    )
+    return is_ancestor(base, f"{remote}/{target}") and base_hash != target_hash
+
+
+def update_local_base(base: str, remote: str, target: str):
+    log(h(f"Updating local branch {base} to {remote}/{target}"), level=1)
+    run_shell_command(
+        [
+            "git",
+            "rebase",
+            f"{remote}/{target}",
+            base,
+        ]
+    )
+
+
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
@@ -618,6 +648,10 @@ def command_submit(args):
     log(h("SUBMIT"), level=1)
 
     current_branch = get_current_branch_name()
+
+    if should_update_local_base(args.base, args.remote, args.target):
+        update_local_base(args.base, args.remote, args.target)
+        run_shell_command(["git", "checkout", current_branch])
 
     # Determine what commits belong to the stack
     st = get_stack(args.base, args.head)
@@ -763,6 +797,10 @@ def delete_branches(st: List[StackEntry], remote: str):
 def command_land(args):
     log(h("LAND"), level=1)
 
+    if should_update_local_base(args.base, args.remote, args.target):
+        update_local_base(args.base, args.remote, args.target)
+        run_shell_command(["git", "checkout", current_branch])
+
     # Determine what commits belong to the stack
     st = get_stack(args.base, args.head)
     if not st:
@@ -862,6 +900,27 @@ def command_abandon(args):
 # ===----------------------------------------------------------------------=== #
 def command_view(args):
     log(h("VIEW"), level=1)
+
+    if should_update_local_base(args.base, args.remote, args.target):
+        log(
+            red(
+                f"\nWarning: Local '{args.base}' is behind '{args.remote}/{args.target}'!"
+            ),
+            level=1,
+        )
+        log(
+            "Consider updating your local branch by running the following commands:",
+            level=1,
+        )
+        log(
+            b(f"   git rebase {args.remote}/{args.target} {args.base}"),
+            level=1,
+        )
+        log(
+            b(f"   git checkout {get_current_branch_name()}\n"),
+            level=1,
+        )
+
     st = get_stack(args.base, args.head)
 
     set_base_branches(st, args.target)
