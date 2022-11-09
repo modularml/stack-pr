@@ -403,7 +403,7 @@ def get_stack(base: str, head: str) -> List[StackEntry]:
 def set_base_branches(st: List[StackEntry], target: str):
     prev_branch = target
     for e in st:
-        e.base, prev_branch = prev_branch, e.head
+        e.base, prev_branch = prev_branch, e._head
 
 
 def verify(st: List[StackEntry], check_base: bool = False):
