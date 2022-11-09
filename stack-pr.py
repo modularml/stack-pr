@@ -518,15 +518,20 @@ def get_next_available_branch_name(name: str) -> str:
     return f"{base}/{int(id) + 1}"
 
 
-def init_local_branches(st: List[StackEntry], remote):
-    log(h(f"Initializing local branches"), level=1)
+def set_head_branches(st: List[StackEntry], remote: str):
+    """Set the head ref for each stack entry if it doesn't already have one."""
+
     run_shell_command(["git", "fetch", "--prune", remote])
     available_name = get_available_branch_name(remote)
-    for e in st:
-        if not e.has_head():
-            e.head = available_name
-            available_name = get_next_available_branch_name(available_name)
+    for e in filter(lambda e: not e.has_head(), st):
+        e.head = available_name
+        available_name = get_next_available_branch_name(available_name)
 
+
+def init_local_branches(st: List[StackEntry], remote: str):
+    log(h(f"Initializing local branches"), level=1)
+    set_head_branches(st, remote)
+    for e in st:
         run_shell_command(
             ["git", "checkout", e.commit.commit_id(), "-B", e.head]
         )
@@ -955,6 +960,7 @@ def command_view(args: CommonArgs):
 
     st = get_stack(args.base, args.head)
 
+    set_head_branches(st, args.remote)
     set_base_branches(st, args.target)
     print_stack(st)
     log(h(blue("SUCCESS!")), level=1)
