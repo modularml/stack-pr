@@ -59,7 +59,7 @@ from git import (
     get_gh_username,
 )
 from shell_commands import get_command_output, run_shell_command
-from typing import List, Optional, Pattern
+from typing import List, NamedTuple, Optional, Pattern
 
 # A bunch of regexps for parsing commit messages and PR descriptions
 RE_RAW_COMMIT_ID = re.compile(r"^(?P<commit>[a-f0-9]+)$", re.MULTILINE)
@@ -667,10 +667,23 @@ def update_local_base(base: str, remote: str, target: str):
     run_shell_command(["git", "rebase", f"{remote}/{target}", base])
 
 
+class CommonArgs(NamedTuple):
+    """Class to help type checkers and separate implementation for CLI args."""
+
+    base: str
+    head: str
+    remote: str
+    target: str
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> "CommonArgs":
+        return cls(args.base, args.head, args.remote, args.target)
+
+
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
-def command_submit(args):
+def command_submit(args: CommonArgs, draft: bool, reviewer: str):
     log(h("SUBMIT"), level=1)
 
     current_branch = get_current_branch_name()
@@ -705,7 +718,7 @@ def command_submit(args):
     # Now we have all the branches, so we can create the corresponding PRs
     log(h("Submitting PRs"), level=1)
     for e in st:
-        create_pr(e, args.draft, args.reviewer)
+        create_pr(e, draft, reviewer)
 
     # Verify consistency in everything we have so far
     verify(st)
@@ -811,7 +824,7 @@ def delete_branches(st: List[StackEntry], remote: str):
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'land' command
 # ===----------------------------------------------------------------------=== #
-def command_land(args):
+def command_land(args: CommonArgs):
     log(h("LAND"), level=1)
 
     current_branch = get_current_branch_name()
@@ -881,7 +894,7 @@ def strip_metadata(e: StackEntry) -> str:
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'abandon' command
 # ===----------------------------------------------------------------------=== #
-def command_abandon(args):
+def command_abandon(args: CommonArgs):
     log(h("ABANDON"), level=1)
     st = get_stack(args.base, args.head)
     if not st:
@@ -911,7 +924,7 @@ def command_abandon(args):
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'view' command
 # ===----------------------------------------------------------------------=== #
-def command_view(args):
+def command_view(args: CommonArgs):
     log(h("VIEW"), level=1)
 
     if should_update_local_base(args.head, args.base, args.remote, args.target):
@@ -946,7 +959,8 @@ def command_view(args):
 # ===----------------------------------------------------------------------=== #
 # Main entry point
 # ===----------------------------------------------------------------------=== #
-def main():
+def parse_args() -> argparse.Namespace:
+    """Helper for CL option definition and parsing logic."""
     parser = argparse.ArgumentParser()
     parser.add_argument("-R", "--remote", default="origin", help="Remote name")
     parser.add_argument(
@@ -980,7 +994,12 @@ def main():
     subparsers.add_parser("abandon", help="Abandon the current stack")
     subparsers.add_parser("view", help="Inspect the current stack")
 
-    args, _ = parser.parse_known_args()
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    common_args = CommonArgs.from_args(args)
 
     check_gh_installed()
     if not is_repo_clean():
@@ -990,13 +1009,13 @@ def main():
     current_branch = get_current_branch_name()
     try:
         if args.command in ["submit", "export"]:
-            command_submit(args)
+            command_submit(common_args, args.draft, args.reviewer)
         elif args.command == "land":
-            command_land(args)
+            command_land(common_args)
         elif args.command == "abandon":
-            command_abandon(args)
+            command_abandon(common_args)
         elif args.command == "view":
-            command_view(args)
+            command_view(common_args)
         else:
             raise Exception(f"Unknown command {args.command}")
     except Exception:
