@@ -55,7 +55,6 @@ import argparse
 import json
 import os
 import re
-import subprocess
 
 from git import (
     branch_exists,
@@ -63,8 +62,8 @@ from git import (
     get_current_branch_name,
     get_gh_username,
 )
+from shell_commands import get_command_output, run_shell_command
 from typing import List, Optional, Pattern
-from shell_commands import run_shell_command, get_command_output
 
 # A bunch of regexps for parsing commit messages and PR descriptions
 RE_RAW_COMMIT_ID = re.compile(r"^(?P<commit>[a-f0-9]+)$", re.MULTILINE)
@@ -203,30 +202,63 @@ class StackEntry:
     linked PR, head and base branches, original git commit.
     """
 
-    commit: Optional[CommitHeader]
-    pr: Optional[str]
-    base: Optional[str]
-    head: Optional[str]
-    need_update: bool
+    def __init__(self, commit: CommitHeader):
+        self.commit = commit
+        self._pr: Optional[str] = None
+        self._base: Optional[str] = None
+        self._head: Optional[str] = None
+        self.need_update: bool = False
 
-    def __init__(self):
-        self.commit = None
-        self.pr = None
-        self.base = self.head = None
-        self.need_update = False
+    @property
+    def pr(self) -> str:
+        if self._pr is None:
+            raise ValueError("pr is not set")
+        return self._pr
+
+    @pr.setter
+    def pr(self, pr: str):
+        self._pr = pr
+
+    def has_pr(self) -> bool:
+        return self._pr is not None
+
+    @property
+    def head(self) -> str:
+        if self._head is None:
+            raise ValueError("head is not set")
+        return self._head
+
+    @head.setter
+    def head(self, head: str):
+        self._head = head
+
+    def has_head(self) -> bool:
+        return self._head is not None
+
+    @property
+    def base(self) -> str:
+        if self._base is None:
+            raise ValueError("base is not set")
+        return self._base
+
+    @base.setter
+    def base(self, base: str):
+        self._base = base
+
+    def has_missing_info(self) -> bool:
+        return None in (self._pr, self._head, self._base)
 
     def pprint(self):
-        s = ""
-        s += b(self.commit.commit_id()[:8])
+        s = b(self.commit.commit_id()[:8])
         pr_string = None
-        if self.pr:
+        if self.has_pr():
             pr_string = blue("#" + self.pr.split("/")[-1])
         else:
             pr_string = red("no PR")
         branch_string = None
-        if self.head or self.base:
-            head_str = green(self.head) if self.head else red(str(self.head))
-            base_str = green(self.base) if self.base else red(str(self.base))
+        if self._head or self._base:
+            head_str = green(self._head) if self._head else red(str(self._head))
+            base_str = green(self._base) if self._base else red(str(self._base))
             branch_string = f"'{head_str}' -> '{base_str}'"
         if pr_string or branch_string:
             s += " ("
@@ -360,8 +392,7 @@ def get_stack(base: str, head: str) -> List[StackEntry]:
     )[::-1]
 
     for i in range(len(stack)):
-        entry = StackEntry()
-        entry.commit = stack[i]
+        entry = StackEntry(stack[i])
         st.append(entry)
 
     for e in st:
@@ -378,7 +409,7 @@ def set_base_branches(st: List[StackEntry], target: str):
 def verify(st: List[StackEntry], check_base: bool = False):
     log(h("Verifying stack info"), level=1)
     for e in st:
-        if e.pr is None or e.head is None or e.base is None:
+        if e.has_missing_info():
             error(ERROR_STACKINFO_MISSING.format(**locals()))
             raise RuntimeError
 
@@ -492,7 +523,7 @@ def init_local_branches(st: List[StackEntry], remote):
     run_shell_command(["git", "fetch", "--prune", remote])
     available_name = get_available_branch_name(remote)
     for e in st:
-        if not e.head:
+        if not e.has_head():
             e.head = available_name
             available_name = get_next_available_branch_name(available_name)
 
@@ -510,7 +541,7 @@ def push_branches(st: List[StackEntry], remote):
 
 def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
     # Don't do anything if the PR already exists
-    if e.pr:
+    if e.has_pr():
         return
     log(h("Creating PR " + green(f"'{e.head}' -> '{e.base}'")), level=1)
     cmd = [
@@ -545,13 +576,11 @@ def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
     e.pr = r.split()[-1]
 
 
-def generate_toc(st: List[StackEntry], current: int):
+def generate_toc(st: List[StackEntry], current: str) -> str:
     res = "Stacked PRs:\n"
     for e in st[::-1]:
         pr_id = last(e.pr)
-        arrow = ""
-        if pr_id == current:
-            arrow = "__->__"
+        arrow = "__->__" if pr_id == current else ""
         res += f" * {arrow}#{pr_id}\n"
     res += "\n"
     return res
@@ -608,11 +637,9 @@ def add_cross_links(st: List[StackEntry]):
 # all the branches are pushed we can set the actual base branches.
 def reset_remote_base_branches(st: List[StackEntry], target: str):
     log(h("Resetting remote base branches"), level=1)
-    for e in st:
-        if e.pr:
-            run_shell_command(
-                ["gh", "pr", "edit", e.pr, "-B", target], shell=False
-            )
+
+    for e in filter(lambda e: e.has_pr(), st):
+        run_shell_command(["gh", "pr", "edit", e.pr, "-B", target], shell=False)
 
 
 # If local 'main' lags behind 'origin/main', and 'head' contains all commits
@@ -640,14 +667,7 @@ def should_update_local_base(head: str, base: str, remote: str, target: str):
 
 def update_local_base(base: str, remote: str, target: str):
     log(h(f"Updating local branch {base} to {remote}/{target}"), level=1)
-    run_shell_command(
-        [
-            "git",
-            "rebase",
-            f"{remote}/{target}",
-            base,
-        ]
-    )
+    run_shell_command(["git", "rebase", f"{remote}/{target}", base])
 
 
 # ===----------------------------------------------------------------------=== #
@@ -748,16 +768,7 @@ def land_pr(e: StackEntry, remote: str, target: str):
     run_shell_command(["git", "push", remote, "-f", f"{e.head}:{e.head}"])
 
     # Switch PR base branch to 'main'
-    run_shell_command(
-        [
-            "gh",
-            "pr",
-            "edit",
-            e.pr,
-            "-B",
-            target,
-        ]
-    )
+    run_shell_command(["gh", "pr", "edit", e.pr, "-B", target])
 
     # Form the commit message: it should contain the original commit message
     # and nothing else.
