@@ -329,15 +329,14 @@ def log(msg, level=0):
 # Common utility functions
 # ===----------------------------------------------------------------------=== #
 def split_header(s: str) -> List[CommitHeader]:
-    return list(map(CommitHeader, s.split("\0")[:-1]))
+    return [CommitHeader(h) for h in s.split("\0")[:-1]]
 
 
 def is_valid_ref(ref: str) -> bool:
-    splits = ref.split("/")
+    splits = ref.rsplit("/", 2)
     if len(splits) < 3:
         return False
-    else:
-        return splits[-2] == "stack" and splits[-1].isnumeric()
+    return splits[-2] == "stack" and splits[-1].isnumeric()
 
 
 def last(ref: str, sep: str = "/") -> str:
@@ -373,7 +372,8 @@ def is_repo_clean() -> bool:
 def get_stack(base: str, head: str) -> List[StackEntry]:
     if not is_ancestor(base, head):
         error(
-            f"{base} is not an ancestor of {head}.\nCould not find commits for the stack."
+            f"{base} is not an ancestor of {head}.\n"
+            "Could not find commits for the stack."
         )
         exit(1)
 
@@ -560,9 +560,7 @@ def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
 
     try:
         r = get_command_output(
-            cmd,
-            shell=False,
-            input=e.commit.commit_msg().encode(),
+            cmd, shell=False, input=e.commit.commit_msg().encode()
         )
     except Exception:
         error(ERROR_CANT_CREATE_PR.format(**locals()))
@@ -573,13 +571,13 @@ def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
 
 
 def generate_toc(st: List[StackEntry], current: str) -> str:
-    res = "Stacked PRs:\n"
-    for e in st[::-1]:
-        pr_id = last(e.pr)
+    def toc_entry(se: StackEntry) -> str:
+        pr_id = last(se.pr)
         arrow = "__->__" if pr_id == current else ""
-        res += f" * {arrow}#{pr_id}\n"
-    res += "\n"
-    return res
+        return f" * {arrow}#{pr_id}\n"
+
+    entries = (toc_entry(se) for se in st[::-1])
+    return f"Stacked PRs:\n{''.join(entries)}\n"
 
 
 def add_cross_links(st: List[StackEntry]):
@@ -595,11 +593,14 @@ def add_cross_links(st: List[StackEntry]):
 
         # Strip stack-info from the body, nothing interesting there.
         body = RE_STACK_INFO_LINE.sub("", body)
-        pr_body = f"""{pr_toc}
-### {title}
-
-{body}
-"""
+        pr_body = "\n".join(
+            [
+                f"{pr_toc}",
+                f"### {title}",
+                "",
+                f"{body}\n",
+            ]
+        )
 
         run_shell_command(
             ["gh", "pr", "edit", e.pr, "-t", title, "-F", "-", "-B", e.base],
@@ -874,8 +875,7 @@ def strip_metadata(e: StackEntry) -> str:
         input=m.encode(),
     )
 
-    new_hash = get_command_output(["git", "rev-parse", e.head], shell=False)
-    return new_hash
+    return get_command_output(["git", "rev-parse", e.head], shell=False)
 
 
 # ===----------------------------------------------------------------------=== #
@@ -893,9 +893,6 @@ def command_abandon(args):
     init_local_branches(st, args.remote)
     set_base_branches(st, args.target)
     print_stack(st)
-    need_to_rebase_current = is_ancestor(
-        st[-1].commit.commit_id(), current_branch
-    )
 
     log(h("Stripping stack metadata from commit messages"), level=1)
 
@@ -920,12 +917,14 @@ def command_view(args):
     if should_update_local_base(args.head, args.base, args.remote, args.target):
         log(
             red(
-                f"\nWarning: Local '{args.base}' is behind '{args.remote}/{args.target}'!"
+                f"\nWarning: Local '{args.base}' is behind"
+                f" '{args.remote}/{args.target}'!"
             ),
             level=1,
         )
         log(
-            "Consider updating your local branch by running the following commands:",
+            "Consider updating your local branch by"
+            " running the following commands:",
             level=1,
         )
         log(
@@ -977,17 +976,11 @@ def main():
         help="List of reviewers for the PR",
     )
 
-    parser_land = subparsers.add_parser("land", help="Land the current stack")
+    subparsers.add_parser("land", help="Land the current stack")
+    subparsers.add_parser("abandon", help="Abandon the current stack")
+    subparsers.add_parser("view", help="Inspect the current stack")
 
-    parser_abandon = subparsers.add_parser(
-        "abandon", help="Abandon the current stack"
-    )
-
-    parser_view = subparsers.add_parser(
-        "view", help="Inspect the current stack"
-    )
-
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     check_gh_installed()
     if not is_repo_clean():
