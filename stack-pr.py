@@ -1006,17 +1006,22 @@ def main():
     common_args = CommonArgs.from_args(args)
 
     check_gh_installed()
-    if not is_repo_clean():
-        error(ERROR_REPO_DIRTY)
-        return
+
+    def check_repo_clean():
+        if not is_repo_clean():
+            error(ERROR_REPO_DIRTY)
+            return
 
     current_branch = get_current_branch_name()
     try:
         if args.command in ["submit", "export"]:
+            check_repo_clean()
             command_submit(common_args, args.draft, args.reviewer)
         elif args.command == "land":
+            check_repo_clean()
             command_land(common_args)
         elif args.command == "abandon":
+            check_repo_clean()
             command_abandon(common_args)
         elif args.command == "view":
             command_view(common_args)
