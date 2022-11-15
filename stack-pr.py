@@ -61,6 +61,7 @@ from git import (
     check_gh_installed,
     get_current_branch_name,
     get_gh_username,
+    get_uncommitted_changes,
 )
 from shell_commands import get_command_output, run_shell_command
 from typing import List, NamedTuple, Optional, Pattern
@@ -360,17 +361,13 @@ def is_ancestor(commit1: str, commit2: str) -> bool:
     return p.returncode == 0
 
 
-# TODO: Move to 'modular.utils.git'
 def is_repo_clean() -> bool:
     """
     Returns true if there are no uncommitted changes in the repo.
     """
-    p = run_shell_command(
-        ["git", "diff", "--quiet", "--exit-code"], check=False
-    )
-
-    assert p.returncode in [0, 1]
-    return p.returncode == 0
+    changes = get_uncommitted_changes()
+    changes.pop("??", [])  # We don't care about untracked files
+    return not bool(changes)
 
 
 def get_stack(base: str, head: str) -> List[StackEntry]:
@@ -529,7 +526,7 @@ def set_head_branches(st: List[StackEntry], remote: str):
 
 
 def init_local_branches(st: List[StackEntry], remote: str):
-    log(h(f"Initializing local branches"), level=1)
+    log(h("Initializing local branches"), level=1)
     set_head_branches(st, remote)
     for e in st:
         run_shell_command(
@@ -793,7 +790,8 @@ def land_pr(e: StackEntry, remote: str, target: str):
     # and nothing else.
     pr_body = RE_STACK_INFO_LINE.sub("", e.commit.commit_msg())
 
-    # Since title is passed separately, we need to strip the first line from the body:
+    # Since title is passed separately, we need to strip the first line from the
+    # body:
     lines = pr_body.splitlines()
     pr_id = last(e.pr)
     title = f"{lines[0]} (#{pr_id})"
