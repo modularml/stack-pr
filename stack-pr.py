@@ -1009,10 +1009,9 @@ def main():
 
     current_branch = get_current_branch_name()
     try:
-        if args.command != "view":
-            if not is_repo_clean():
-                error(ERROR_REPO_DIRTY)
-                return
+        if args.command != "view" and not is_repo_clean():
+            error(ERROR_REPO_DIRTY)
+            return
 
         if args.command in ["submit", "export"]:
             command_submit(common_args, args.draft, args.reviewer)
