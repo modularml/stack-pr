@@ -1,6 +1,8 @@
 
 # Stacked PRs Workflow
 
+[TOC]
+
 ## What exactly are stacked PRs, and why are they useful?
 
 Imagine that we have a change `A` and a change `B` depending on `A`, and we
@@ -270,13 +272,11 @@ and seamlessly.
 
 ## Known Issues
 
-1. The script doesn’t check if your local repo is dirty (i.e. has uncommitted
-   changes), and will probably fail in that case.
-2. If you rebase your changes on origin/main but your main stays behind, the
+1. If you rebase your changes on origin/main but your main stays behind, the
    default invocation of the script will include commits that are already
    merged. A mitigation for this is to keep `main` in sync with `origin/main`,
    or specify commit ranges manually.
-3. If a PR had been created for a commit that was then dropped from a stack,
+2. If a PR had been created for a commit that was then dropped from a stack,
    the PR and the corresponding branch will remain open. This will not affect
    exporting and merging process for the stack but will leave a dangling PR and
    a branch.
