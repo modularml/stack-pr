@@ -1,6 +1,8 @@
 
 # Stacked PRs Workflow
 
+[TOC]
+
 ## What exactly are stacked PRs, and why are they useful?
 
 Imagine that we have a change `A` and a change `B` depending on `A`, and we
