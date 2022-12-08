@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+#
 # stack-pr: a tool for working with stacked PRs on github.
 #
 # ------------------
