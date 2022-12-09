@@ -941,8 +941,10 @@ def command_view(args: CommonArgs):
             level=1,
         )
         log(
-            "Consider updating your local branch by"
-            " running the following commands:",
+            (
+                "Consider updating your local branch by"
+                " running the following commands:"
+            ),
             level=1,
         )
         log(
