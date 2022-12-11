@@ -689,6 +689,26 @@ class CommonArgs(NamedTuple):
         return cls(args.base, args.head, args.remote, args.target)
 
 
+# If the base isn't explicitly specified, find the merge base between
+# 'origin/main' and 'head'.
+#
+# E.g. in the example below we want to include commits E and F into the stack,
+# and to do that we pick B as our base:
+#
+# --> a ----> b  ----> c ----> d
+#   (main)     \          (origin/main)
+#               \
+#                ---> e ----> f
+#                           (head)
+def deduce_base(args: CommonArgs) -> CommonArgs:
+    if args.base:
+        return args
+    deduced_base = get_command_output(
+        ["git", "merge-base", args.head, f"{args.remote}/main"], shell=False
+    )
+    return CommonArgs(deduced_base, args.head, args.remote, args.target)
+
+
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
@@ -988,9 +1008,7 @@ def parse_args() -> argparse.Namespace:
     """Helper for CL option definition and parsing logic."""
     parser = argparse.ArgumentParser()
     parser.add_argument("-R", "--remote", default="origin", help="Remote name")
-    parser.add_argument(
-        "-B", "--base", default="main", help="Local base branch"
-    )
+    parser.add_argument("-B", "--base", help="Local base branch")
     parser.add_argument(
         "-H", "--head", default="HEAD", help="Local head branch"
     )
@@ -1033,6 +1051,7 @@ def main():
         if args.command != "view" and not is_repo_clean():
             error(ERROR_REPO_DIRTY)
             return
+        common_args = deduce_base(common_args)
 
         if args.command in ["submit", "export"]:
             command_submit(common_args, args.draft, args.reviewer)
