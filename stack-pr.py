@@ -100,6 +100,11 @@ ERROR_CANT_REBASE = """Could not rebase the PR on '{target}'. Failed to land PR:
 
 Failed trying to execute {cmd}
 """
+ERROR_CANT_CHECKOUT_REMOTE_BRANCH = """Could not checkout remote branch '{e.head}'. Failed to land PR:
+    {e}
+
+Failed trying to execute {cmd}
+"""
 ERROR_STACKINFO_MISSING = """A stack entry is missing some information:
     {e}
 
@@ -760,6 +765,7 @@ def command_submit(args: CommonArgs, draft: bool, reviewer: str):
         log(h(f"Checking out the original branch '{current_branch}'"), level=1)
         run_shell_command(["git", "checkout", current_branch])
 
+    delete_local_branches(st)
     log(h(blue("SUCCESS!")), level=1)
 
 
@@ -770,6 +776,13 @@ def land_pr(e: StackEntry, remote: str, target: str):
     log(b("Landing ") + e.pprint(), level=2)
     # Rebase the head branch to the most recent 'origin/main'
     run_shell_command(["git", "fetch", "--prune", remote])
+    cmd = ["git", "checkout", f"{remote}/{e.head}", "-B", e.head]
+    try:
+        run_shell_command(cmd)
+    except Exception:
+        error(ERROR_CANT_CHECKOUT_REMOTE_BRANCH.format(**locals()))
+        raise
+
     cmd = [
         "git",
         "rebase",
@@ -804,13 +817,18 @@ def land_pr(e: StackEntry, remote: str, target: str):
     )
 
 
-def delete_branches(st: List[StackEntry], remote: str):
+def delete_local_branches(st: List[StackEntry]):
+    log(h("Deleting local branches"), level=1)
     # Delete local branches
     cmd = ["git", "branch", "-D"]
     cmd.extend([e.head for e in st if e.head])
     run_shell_command(cmd, check=False)
 
-    # Delete remote branches
+
+def delete_remote_branches(st: List[StackEntry], remote: str):
+    log(h("Deleting remote branches"), level=1)
+    run_shell_command(["git", "fetch", "--prune", remote])
+
     username = get_gh_username()
     refs = get_command_output(
         [
@@ -862,11 +880,10 @@ def command_land(args: CommonArgs):
         land_pr(e, args.remote, args.target)
 
     # Delete local and remote stack branches
-    run_shell_command(["git", "fetch", "--prune", args.remote])
     run_shell_command(["git", "checkout", current_branch])
 
-    log(h("Deleting local and remote branches"), level=1)
-    delete_branches(st, args.remote)
+    delete_local_branches(st)
+    delete_remote_branches(st, args.remote)
 
     # If local branch {target} exists, rebase it on the remote/target
     if branch_exists(args.target):
@@ -924,8 +941,8 @@ def command_abandon(args: CommonArgs):
     log(h("Rebasing the current branch on top of updated top branch"), level=1)
     run_shell_command(["git", "rebase", last_hash, current_branch], shell=False)
 
-    log(h("Deleting local and remote branches"), level=1)
-    delete_branches(st, args.remote)
+    delete_local_branches(st)
+    delete_remote_branches(st, args.remote)
     log(h(blue("SUCCESS!")), level=1)
 
 
