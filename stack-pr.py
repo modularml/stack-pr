@@ -147,6 +147,23 @@ ERROR_REPO_DIRTY = """There are uncommitted changes.
 
 Please commit or stash them before working with stacks.
 """
+UPDATE_STACK_TIP = """
+If you'd like to push your local changes first, you can use the following command to update the stack:
+  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit} export"""
+EXPORT_STACK_TIP = """
+You can use the following command to do that:
+  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit} export
+"""
+LAND_STACK_TIP = """
+To land it, you could run:
+  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit} land
+
+If you'd like to land stack except the top N commits, you could use the following command:
+  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit}~N land
+
+If you prefer to merge via the github web UI, please don't forget to edit commit message on the merge page!
+If you use the default commit message filled by the web UI, links to other PRs from the stack will be included in the commit message.
+"""
 
 # ===----------------------------------------------------------------------=== #
 # Class to work with git commit contents
@@ -709,6 +726,19 @@ def deduce_base(args: CommonArgs) -> CommonArgs:
     return CommonArgs(deduced_base, args.head, args.remote, args.target)
 
 
+def print_tips_after_export(st: List[StackEntry], args: CommonArgs):
+    stack_size = len(st)
+    if stack_size == 0:
+        return
+
+    top_commit = args.head
+    if top_commit == "HEAD":
+        top_commit = get_current_branch_name()
+
+    log(b("\nOnce the stack is reviewed, it is ready to land!"), level=1)
+    log(LAND_STACK_TIP.format(**locals()))
+
+
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
@@ -783,6 +813,7 @@ def command_submit(args: CommonArgs, draft: bool, reviewer: str):
         run_shell_command(["git", "checkout", current_branch])
 
     delete_local_branches(st)
+    print_tips_after_export(st, args)
     log(h(blue("SUCCESS!")), level=1)
 
 
@@ -964,6 +995,34 @@ def command_abandon(args: CommonArgs):
 
 
 # ===----------------------------------------------------------------------=== #
+# VIEW
+# ===----------------------------------------------------------------------=== #
+def print_tips_after_view(st: List[StackEntry], args: CommonArgs):
+    stack_size = len(st)
+    if stack_size == 0:
+        return
+
+    ready_to_land = all([not e.has_missing_info() for e in st])
+
+    top_commit = args.head
+    if top_commit == "HEAD":
+        top_commit = get_current_branch_name()
+
+    if ready_to_land:
+        log(b("\nThis stack is ready to land!"), level=1)
+        log(UPDATE_STACK_TIP.format(**locals()))
+        log(LAND_STACK_TIP.format(**locals()))
+        return
+
+    # Stack is not ready to land, suggest exporting it first
+    log(
+        b("\nThis stack can't be landed yet, you need to export it first."),
+        level=1,
+    )
+    log(EXPORT_STACK_TIP.format(**locals()))
+
+
+# ===----------------------------------------------------------------------=== #
 # Entry point for 'view' command
 # ===----------------------------------------------------------------------=== #
 def command_view(args: CommonArgs):
@@ -998,6 +1057,7 @@ def command_view(args: CommonArgs):
     set_head_branches(st, args.remote)
     set_base_branches(st, args.target)
     print_stack(st)
+    print_tips_after_view(st, args)
     log(h(blue("SUCCESS!")), level=1)
 
 
