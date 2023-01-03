@@ -1064,21 +1064,30 @@ def command_view(args: CommonArgs):
 # ===----------------------------------------------------------------------=== #
 # Main entry point
 # ===----------------------------------------------------------------------=== #
+
+
 def parse_args() -> argparse.Namespace:
     """Helper for CL option definition and parsing logic."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("-R", "--remote", default="origin", help="Remote name")
-    parser.add_argument("-B", "--base", help="Local base branch")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(help="sub-command help", dest="command")
+
+    common_parser = argparse.ArgumentParser(add_help=False)
+    common_parser.add_argument(
+        "-R", "--remote", default="origin", help="Remote name"
+    )
+    common_parser.add_argument("-B", "--base", help="Local base branch")
+    common_parser.add_argument(
         "-H", "--head", default="HEAD", help="Local head branch"
     )
-    parser.add_argument(
+    common_parser.add_argument(
         "-T", "--target", default="main", help="Remote target branch"
     )
 
-    subparsers = parser.add_subparsers(help="sub-command help", dest="command")
     parser_submit = subparsers.add_parser(
-        "submit", aliases=["export"], help="Submit a stack of PRs"
+        "submit",
+        aliases=["export"],
+        help="Submit a stack of PRs",
+        parents=[common_parser],
     )
     parser_submit.add_argument(
         "-d",
@@ -1093,9 +1102,21 @@ def parse_args() -> argparse.Namespace:
         help="List of reviewers for the PR",
     )
 
-    subparsers.add_parser("land", help="Land the current stack")
-    subparsers.add_parser("abandon", help="Abandon the current stack")
-    subparsers.add_parser("view", help="Inspect the current stack")
+    subparsers.add_parser(
+        "land",
+        help="Land the current stack",
+        parents=[common_parser],
+    )
+    subparsers.add_parser(
+        "abandon",
+        help="Abandon the current stack",
+        parents=[common_parser],
+    )
+    subparsers.add_parser(
+        "view",
+        help="Inspect the current stack",
+        parents=[common_parser],
+    )
 
     return parser.parse_args()
 
