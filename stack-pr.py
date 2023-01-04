@@ -149,17 +149,17 @@ Please commit or stash them before working with stacks.
 """
 UPDATE_STACK_TIP = """
 If you'd like to push your local changes first, you can use the following command to update the stack:
-  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit} export"""
+  $ stack-pr export -B {top_commit}~{stack_size} -H {top_commit}"""
 EXPORT_STACK_TIP = """
 You can use the following command to do that:
-  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit} export
+  $ stack-pr export -B {top_commit}~{stack_size} -H {top_commit}
 """
 LAND_STACK_TIP = """
 To land it, you could run:
-  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit} land
+  $ stack-pr land -B {top_commit}~{stack_size} -H {top_commit}
 
 If you'd like to land stack except the top N commits, you could use the following command:
-  $ stack-pr -B {top_commit}~{stack_size} -H {top_commit}~N land
+  $ stack-pr land -B {top_commit}~{stack_size} -H {top_commit}~N
 
 If you prefer to merge via the github web UI, please don't forget to edit commit message on the merge page!
 If you use the default commit message filled by the web UI, links to other PRs from the stack will be included in the commit message.
