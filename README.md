@@ -69,7 +69,7 @@ and `-T` respectively and accept the standard git notation: e.g. one can use
 #### Example
 
 The first step before creating a stack of PRs is to double-check the changes
-we’re going to post. 
+we’re going to post.
 
 By default the tool will look at commits in `main..HEAD` range and will create
 a PR for every commit in that range.
@@ -89,7 +89,7 @@ trying to create a stack.
 
 > **Pro-tip**: a convenient way to see what commits will be considered by
 > default is the following command:
-> 
+>
 
 ```bash
 alias githist='git log --abbrev-commit --oneline $(git merge-base origin/main HEAD)^..HEAD'
@@ -175,13 +175,13 @@ the script:
 
 ```bash
 # Submit a stack of last 5 commits
-utils/stack-pr.py -B HEAD~5 submit
+utils/stack-pr.py submit -B HEAD~5
 
 # Use 'origin/main' instead of 'main' as the base for the stack
-utils/stack-pr.py -B origin/main submit
+utils/stack-pr.py submit -B origin/main
 
 # Do not include last two commits to the stack
-utils/stack-pr.py -H HEAD~2 submit
+utils/stack-pr.py submit -H HEAD~2
 ```
 
 These options work for all script commands (and it’s recommended to first use
@@ -191,14 +191,14 @@ land first three of them:
 
 ```bash
 # Inspect what commits will be included HEAD~5..HEAD
-utils/stack-pr.py -B HEAD~5 view
+utils/stack-pr.py view -B HEAD~5
 # Create a stack from last five commits
-utils/stack-pr.py -B HEAD~5 submit
+utils/stack-pr.py submit -B HEAD~5
 
 # Inspect what commits will be included into the range HEAD~5..HEAD~2
-utils/stack-pr.py -B HEAD~5 -H HEAD~2 view
+utils/stack-pr.py view -B HEAD~5 -H HEAD~2
 # Land first three PRs from the stack
-utils/stack-pr.py -B HEAD~5 -H HEAD~2 land
+utils/stack-pr.py land -B HEAD~5 -H HEAD~2
 ```
 
 ### Practical Recommendations
