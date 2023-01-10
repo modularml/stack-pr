@@ -1069,7 +1069,7 @@ def command_view(args: CommonArgs):
 # ===----------------------------------------------------------------------=== #
 
 
-def parse_args() -> argparse.Namespace:
+def create_argparser() -> argparse.ArgumentParser:
     """Helper for CL option definition and parsing logic."""
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help="sub-command help", dest="command")
@@ -1121,11 +1121,18 @@ def parse_args() -> argparse.Namespace:
         parents=[common_parser],
     )
 
-    return parser.parse_args()
+    return parser
 
 
 def main():
-    args = parse_args()
+    parser = create_argparser()
+    args = parser.parse_args()
+
+    if not args.command:
+        print(h(red("Invalid usage of the stack-pr command.")))
+        parser.print_help()
+        return
+
     common_args = CommonArgs.from_args(args)
 
     check_gh_installed()
