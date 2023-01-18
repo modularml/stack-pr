@@ -18,6 +18,13 @@ Example:
 
 ## `stack-pr.py` User Guide
 
+## Dependencies
+
+This is a non-comprehensive list of dependencies required by `stack-pr.py`:
+
+- Install `gh`, e.g., `brew install gh` on MacOS.
+- Run `gh auth login` with SSH
+
 ### Workflow
 
 `utils/stack-pr.py` is a script allowing you to work with stacked PRs: submit,
