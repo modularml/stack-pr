@@ -831,20 +831,6 @@ def land_pr(e: StackEntry, remote: str, target: str):
         error(ERROR_CANT_CHECKOUT_REMOTE_BRANCH.format(**locals()))
         raise
 
-    cmd = [
-        "git",
-        "rebase",
-        f"{remote}/{target}",
-        e.head,
-        "--committer-date-is-author-date",
-    ]
-    try:
-        run_shell_command(cmd)
-    except Exception:
-        error(ERROR_CANT_REBASE.format(**locals()))
-        raise
-    run_shell_command(["git", "push", remote, "-f", f"{e.head}:{e.head}"])
-
     # Switch PR base branch to 'main'
     run_shell_command(["gh", "pr", "edit", e.pr, "-B", target])
 
