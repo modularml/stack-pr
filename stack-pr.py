@@ -165,6 +165,7 @@ If you prefer to merge via the github web UI, please don't forget to edit commit
 If you use the default commit message filled by the web UI, links to other PRs from the stack will be included in the commit message.
 """
 
+
 # ===----------------------------------------------------------------------=== #
 # Class to work with git commit contents
 # ===----------------------------------------------------------------------=== #
@@ -503,9 +504,7 @@ def add_or_update_metadata(e: StackEntry, needs_rebase: bool) -> bool:
     # Add the stack info metadata to the commit message
     commit_msg += f"\n\nstack-info: PR: {e.pr}, branch: {e.head}"
     run_shell_command(
-        ["git", "commit", "--amend", "-F", "-"],
-        shell=False,
-        input=commit_msg.encode(),
+        ["git", "commit", "--amend", "-F", "-"], input=commit_msg.encode()
     )
     return True
 
@@ -585,9 +584,7 @@ def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
         cmd.append("--draft")
 
     try:
-        r = get_command_output(
-            cmd, shell=False, input=e.commit.commit_msg().encode()
-        )
+        r = get_command_output(cmd, input=e.commit.commit_msg().encode())
     except Exception:
         error(ERROR_CANT_CREATE_PR.format(**locals()))
         raise
@@ -630,7 +627,6 @@ def add_cross_links(st: List[StackEntry]):
 
         run_shell_command(
             ["gh", "pr", "edit", e.pr, "-t", title, "-F", "-", "-B", e.base],
-            shell=False,
             input=pr_body.encode(),
         )
 
@@ -662,7 +658,7 @@ def reset_remote_base_branches(st: List[StackEntry], target: str):
     log(h("Resetting remote base branches"), level=1)
 
     for e in filter(lambda e: e.has_pr(), st):
-        run_shell_command(["gh", "pr", "edit", e.pr, "-B", target], shell=False)
+        run_shell_command(["gh", "pr", "edit", e.pr, "-B", target])
 
 
 # If local 'main' lags behind 'origin/main', and 'head' contains all commits
@@ -677,10 +673,8 @@ def reset_remote_base_branches(st: List[StackEntry], target: str):
 # base (e.g. explicit hash of the commit) - but most probably nobody ever would
 # need that.
 def should_update_local_base(head: str, base: str, remote: str, target: str):
-    base_hash = get_command_output(["git", "rev-parse", base], shell=False)
-    target_hash = get_command_output(
-        ["git", "rev-parse", f"{remote}/{target}"], shell=False
-    )
+    base_hash = get_command_output(["git", "rev-parse", base])
+    target_hash = get_command_output(["git", "rev-parse", f"{remote}/{target}"])
     return (
         is_ancestor(base, f"{remote}/{target}")
         and is_ancestor(f"{remote}/{target}", head)
@@ -721,7 +715,7 @@ def deduce_base(args: CommonArgs) -> CommonArgs:
     if args.base:
         return args
     deduced_base = get_command_output(
-        ["git", "merge-base", args.head, f"{args.remote}/main"], shell=False
+        ["git", "merge-base", args.head, f"{args.remote}/main"]
     )
     return CommonArgs(deduced_base, args.head, args.remote, args.target)
 
@@ -846,7 +840,6 @@ def land_pr(e: StackEntry, remote: str, target: str):
     pr_body = "\n".join(lines[1:]) or " "
     run_shell_command(
         ["gh", "pr", "merge", e.pr, "--squash", "-t", title, "-F", "-"],
-        shell=False,
         input=pr_body.encode(),
     )
 
@@ -941,13 +934,9 @@ def strip_metadata(e: StackEntry) -> str:
     run_shell_command(
         ["git", "rebase", e.base, e.head, "--committer-date-is-author-date"]
     )
-    run_shell_command(
-        ["git", "commit", "--amend", "-F", "-"],
-        shell=False,
-        input=m.encode(),
-    )
+    run_shell_command(["git", "commit", "--amend", "-F", "-"], input=m.encode())
 
-    return get_command_output(["git", "rev-parse", e.head], shell=False)
+    return get_command_output(["git", "rev-parse", e.head])
 
 
 # ===----------------------------------------------------------------------=== #
@@ -973,7 +962,7 @@ def command_abandon(args: CommonArgs):
         last_hash = strip_metadata(e)
 
     log(h("Rebasing the current branch on top of updated top branch"), level=1)
-    run_shell_command(["git", "rebase", last_hash, current_branch], shell=False)
+    run_shell_command(["git", "rebase", last_hash, current_branch])
 
     delete_local_branches(st)
     delete_remote_branches(st, args.remote)
