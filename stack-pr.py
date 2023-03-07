@@ -359,6 +359,7 @@ def split_header(s: str) -> List[CommitHeader]:
 
 
 def is_valid_ref(ref: str) -> bool:
+    ref = ref.strip("'")
     splits = ref.rsplit("/", 2)
     if len(splits) < 3:
         return False
@@ -522,7 +523,9 @@ def get_available_branch_name(remote: str) -> str:
     ).split()
 
     max_ref_num = (
-        max(int(last(ref)) for ref in filter(is_valid_ref, refs)) if refs else 0
+        max(int(last(ref.strip("'"))) for ref in filter(is_valid_ref, refs))
+        if refs
+        else 0
     )
     new_branch_id = max_ref_num + 1
 
