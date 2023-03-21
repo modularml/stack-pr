@@ -899,6 +899,10 @@ def command_land(args: CommonArgs):
         log(h(blue("SUCCESS!")), level=1)
         return
 
+    if len(st) != 1:
+        error("Cannot land more than one PR at a time!")
+        return
+
     # Initialize base branches of elements in the stack. Head branches should
     # already be there from the metadata that commits need to have by that
     # point.
