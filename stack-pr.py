@@ -525,11 +525,9 @@ def get_available_branch_name(remote: str) -> str:
         ]
     ).split()
 
-    max_ref_num = (
-        max(int(last(ref.strip("'"))) for ref in filter(is_valid_ref, refs))
-        if refs
-        else 0
-    )
+    max_ref_num = max(
+        int(last(ref.strip("'"))) for ref in filter(is_valid_ref, refs)
+    ) if refs else 0
     new_branch_id = max_ref_num + 1
 
     return f"{username}/stack/{new_branch_id}"
