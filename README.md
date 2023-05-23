@@ -257,6 +257,7 @@ No, the tool cleans up branches as soon as the PR gets merged or abandoned. For
 each open PR there is just one branch.
 
 ### If we add extra merge rules (i.e. requiring an approval for every PR before
+
 merge), will they be followed in this workflow?
 
 Yes. The tool relies on `gh-cli`, which uses the same rules as the default
@@ -268,6 +269,7 @@ No, `stack-pr.py` does not require us to change any security properties of the
 repo.
 
 ### Can I use it along with other tools/workflows? E.g. with web interface or
+
 `export-pr.py`
 
 Yes, you can use other tools and workflows, e.g. you can use web UI to land PRs
