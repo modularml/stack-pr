@@ -131,7 +131,7 @@ The command accepts a couple of options that might be useful, namely:
 If the command succeeded, we should see “SUCCESS!” in the end, and we can now
 run `view` again to look at the new stack:
 
-```
+```python
 # utils/stack-pr.py view
 ...
 **Stack**:
@@ -150,7 +150,7 @@ and run `submit` again. If needed, we can rearrange commits or add new ones.
 
 When we are ready to merge our changes, we use `land` command.
 
-```
+```python
 # utils/stack-pr.py land
 ...
 **Stack**:
