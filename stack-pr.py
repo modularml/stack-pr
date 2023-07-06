@@ -56,6 +56,7 @@ import argparse
 import json
 import os
 import re
+from subprocess import SubprocessError
 
 from git import (
     branch_exists,
@@ -562,6 +563,18 @@ def push_branches(st: List[StackEntry], remote):
     cmd = ["git", "push", "-f", remote]
     cmd.extend([f"{e.head}:{e.head}" for e in st])
     run_shell_command(cmd)
+
+
+def print_cmd_failure_details(exc: SubprocessError):
+    cmd_stdout = (
+        exc.stdout.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
+    )
+    cmd_stderr = (
+        exc.stderr.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
+    )
+    print(f"Exitcode: {exc.returncode}")
+    print(f"Stdout: {cmd_stdout}")
+    print(f"Stderr: {cmd_stderr}")
 
 
 def create_pr(e: StackEntry, is_draft: bool, reviewer: str = ""):
@@ -1134,9 +1147,11 @@ def main():
             command_view(common_args)
         else:
             raise Exception(f"Unknown command {args.command}")
-    except Exception:
+    except Exception as exc:
         # If something failed, checkout the original branch
         run_shell_command(["git", "checkout", current_branch])
+        if isinstance(exc, SubprocessError):
+            print_cmd_failure_details(exc)
         raise
 
 
