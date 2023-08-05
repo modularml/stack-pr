@@ -828,6 +828,32 @@ def command_submit(args: CommonArgs, draft: bool, reviewer: str):
 # ===----------------------------------------------------------------------=== #
 # LAND
 # ===----------------------------------------------------------------------=== #
+def rebase_pr(e: StackEntry, remote: str, target: str):
+    log(b("Rebasing ") + e.pprint(), level=2)
+    # Rebase the head branch to the most recent 'origin/main'
+    run_shell_command(["git", "fetch", "--prune", remote])
+    cmd = ["git", "checkout", f"{remote}/{e.head}", "-B", e.head]
+    try:
+        run_shell_command(cmd)
+    except Exception:
+        error(ERROR_CANT_CHECKOUT_REMOTE_BRANCH.format(**locals()))
+        raise
+
+    cmd = [
+        "git",
+        "rebase",
+        f"{remote}/{target}",
+        e.head,
+        "--committer-date-is-author-date",
+    ]
+    try:
+        run_shell_command(cmd)
+    except Exception:
+        error(ERROR_CANT_REBASE.format(**locals()))
+        raise
+    run_shell_command(["git", "push", remote, "-f", f"{e.head}:{e.head}"])
+
+
 def land_pr(e: StackEntry, remote: str, target: str):
     log(b("Landing ") + e.pprint(), level=2)
     # Rebase the head branch to the most recent 'origin/main'
@@ -907,10 +933,6 @@ def command_land(args: CommonArgs):
         log(h(blue("SUCCESS!")), level=1)
         return
 
-    if len(st) != 1:
-        error("Cannot land more than one PR at a time!")
-        return
-
     # Initialize base branches of elements in the stack. Head branches should
     # already be there from the metadata that commits need to have by that
     # point.
@@ -920,15 +942,26 @@ def command_land(args: CommonArgs):
     # Verify that the stack is correct before trying to land it.
     verify(st, check_base=True)
 
-    # All good, land!
-    for e in st:
-        land_pr(e, args.remote, args.target)
+    # All good, land the bottommost PR!
+    land_pr(st[0], args.remote, args.target)
+
+    # The rest of the stack now needs to be rebased.
+    if len(st) > 1:
+        log(h("Rebasing the rest of the stack"), level=1)
+        prs_to_rebase = st[1:]
+        print_stack(prs_to_rebase)
+        for e in prs_to_rebase:
+            rebase_pr(e, args.remote, args.target)
+        # Change the target of the new bottom-most PR in the stack to 'target'
+        run_shell_command(
+            ["gh", "pr", "edit", prs_to_rebase[0].pr, "-B", args.target]
+        )
 
     # Delete local and remote stack branches
     run_shell_command(["git", "checkout", current_branch])
 
     delete_local_branches(st)
-    delete_remote_branches(st, args.remote)
+    delete_remote_branches(st[:1], args.remote)
 
     # If local branch {target} exists, rebase it on the remote/target
     if branch_exists(args.target):
