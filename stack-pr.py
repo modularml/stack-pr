@@ -480,6 +480,15 @@ def print_stack(st: List[StackEntry], level=1):
         log("   * " + e.pprint(), level=level)
 
 
+def draft_bitmask_type(value: str) -> List[bool]:
+    # Validate that only 0s and 1s are present
+    if value and not set(value).issubset({"0", "1"}):
+        raise argparse.ArgumentTypeError("Bitmask must only contain 0s and 1s.")
+
+    # Convert to list of booleans
+    return [bool(int(bit)) for bit in value]
+
+
 # ===----------------------------------------------------------------------=== #
 # SUBMIT
 # ===----------------------------------------------------------------------=== #
@@ -750,7 +759,12 @@ def print_tips_after_export(st: List[StackEntry], args: CommonArgs):
 # ===----------------------------------------------------------------------=== #
 # Entry point for 'submit' command
 # ===----------------------------------------------------------------------=== #
-def command_submit(args: CommonArgs, draft: bool, reviewer: str):
+def command_submit(
+    args: CommonArgs,
+    draft: bool,
+    reviewer: str,
+    draft_bitmask: List[bool] = None,
+):
     log(h("SUBMIT"), level=1)
 
     current_branch = get_current_branch_name()
@@ -764,6 +778,13 @@ def command_submit(args: CommonArgs, draft: bool, reviewer: str):
     if not st:
         log(h("Empty stack!"), level=1)
         log(h(blue("SUCCESS!")), level=1)
+        return
+
+    if (draft_bitmask is not None) and (len(draft_bitmask) != len(st)):
+        log(
+            h("Draft bitmask passed to 'submit' doesn't match number of PRs!"),
+            level=1,
+        )
         return
 
     # Create local branches and initialize base and head fields in the stack
@@ -784,8 +805,11 @@ def command_submit(args: CommonArgs, draft: bool, reviewer: str):
 
     # Now we have all the branches, so we can create the corresponding PRs
     log(h("Submitting PRs"), level=1)
-    for e in st:
-        create_pr(e, draft, reviewer)
+    for e_idx, e in enumerate(st):
+        is_pr_draft = draft or (
+            (draft_bitmask is not None) and draft_bitmask[e_idx]
+        )
+        create_pr(e, is_pr_draft, reviewer)
 
     # Verify consistency in everything we have so far
     verify(st)
@@ -1123,6 +1147,12 @@ def create_argparser() -> argparse.ArgumentParser:
         help="Submit PRs in draft mode",
     )
     parser_submit.add_argument(
+        "--draft-bitmask",
+        type=draft_bitmask_type,
+        default=None,
+        help="Bitmask of whether each PR is a draft (optional).",
+    )
+    parser_submit.add_argument(
         "--reviewer",
         default=os.getenv("STACK_PR_DEFAULT_REVIEWER", default=""),
         help="List of reviewers for the PR",
@@ -1168,7 +1198,12 @@ def main():
         common_args = deduce_base(common_args)
 
         if args.command in ["submit", "export"]:
-            command_submit(common_args, args.draft, args.reviewer)
+            command_submit(
+                common_args,
+                args.draft,
+                args.reviewer,
+                draft_bitmask=args.draft_bitmask,
+            )
         elif args.command == "land":
             command_land(common_args)
         elif args.command == "abandon":
