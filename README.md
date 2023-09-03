@@ -128,6 +128,12 @@ The command accepts a couple of options that might be useful, namely:
 
 - `--draft` - mark all created PRs as draft. This helps to avoid over-burdening
   CI.
+- `--draft-bitmask` - mark select PRs in a stack as draft using a bitmask where
+    `1` indicates draft, and `0` indicates non-draft.
+    For example `--draft-bitmask 0010` to make the third PR a draft in a stack
+    of four.
+    The length of the bitmask must match the number of stacked PRs.
+    Overridden by `--draft` when passed.
 - `--reviewer="handle1,handle2"` - assign specified reviewers.
 
 If the command succeeded, we should see “SUCCESS!” in the end, and we can now
