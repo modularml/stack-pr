@@ -85,6 +85,9 @@ RE_PR_TOC = re.compile(
     r"^Stacked PRs:\r?\n(^ \* (__->__)?#\d+\r?\n)*\r?\n", re.MULTILINE
 )
 
+# Delimeter for PR body
+CROSS_LINKS_DELIMETER = "--- --- ---"
+
 # ===----------------------------------------------------------------------=== #
 # Error message templates
 # ===----------------------------------------------------------------------=== #
@@ -629,7 +632,14 @@ def generate_toc(st: List[StackEntry], current: str) -> str:
     return f"Stacked PRs:\n{''.join(entries)}\n"
 
 
-def add_cross_links(st: List[StackEntry]):
+def get_current_pr_body(e: StackEntry):
+    out = get_command_output(
+        ["gh", "pr", "view", e.pr, "--json", "body"],
+    )
+    return json.loads(out)["body"].strip()
+
+
+def add_cross_links(st: List[StackEntry], keep_body: bool):
     for e in st:
         pr_id = last(e.pr)
         pr_toc = generate_toc(st, pr_id)
@@ -642,18 +652,29 @@ def add_cross_links(st: List[StackEntry]):
 
         # Strip stack-info from the body, nothing interesting there.
         body = RE_STACK_INFO_LINE.sub("", body)
-        pr_body = "\n".join(
-            [
-                f"{pr_toc}",
-                f"### {title}",
-                "",
-                f"{body}\n",
-            ]
-        )
+        pr_body = [
+            f"{pr_toc}",
+            f"{CROSS_LINKS_DELIMETER}\n",
+        ]
+
+        if keep_body:
+            # Keep current body of the PR after the cross links component
+            current_pr_body = get_current_pr_body(e)
+            pr_body.append(
+                current_pr_body.split(CROSS_LINKS_DELIMETER, 1)[-1].lstrip()
+            )
+        else:
+            pr_body.extend(
+                [
+                    f"### {title}",
+                    "",
+                    f"{body}",
+                ]
+            )
 
         run_shell_command(
             ["gh", "pr", "edit", e.pr, "-t", title, "-F", "-", "-B", e.base],
-            input=pr_body.encode(),
+            input="\n".join(pr_body).encode(),
         )
 
 
@@ -766,6 +787,7 @@ def command_submit(
     args: CommonArgs,
     draft: bool,
     reviewer: str,
+    keep_body: bool,
     draft_bitmask: List[bool] = None,
 ):
     log(h("SUBMIT"), level=1)
@@ -830,7 +852,7 @@ def command_submit(
     push_branches(st, args.remote)
 
     log(h("Adding cross-links to PRs"), level=1)
-    add_cross_links(st)
+    add_cross_links(st, keep_body)
 
     if need_to_rebase_current:
         log(h(f"Rebasing the original branch '{current_branch}'"), level=1)
@@ -1143,6 +1165,12 @@ def create_argparser() -> argparse.ArgumentParser:
         parents=[common_parser],
     )
     parser_submit.add_argument(
+        "--keep-body",
+        action="store_true",
+        default=False,
+        help="Keep current PR body and only add/update cross links",
+    )
+    parser_submit.add_argument(
         "-d",
         "--draft",
         action="store_true",
@@ -1205,6 +1233,7 @@ def main():
                 common_args,
                 args.draft,
                 args.reviewer,
+                args.keep_body,
                 draft_bitmask=args.draft_bitmask,
             )
         elif args.command == "land":
