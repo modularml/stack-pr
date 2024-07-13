@@ -1,4 +1,3 @@
-
 # Stacked PRs Workflow
 
 ## What exactly are stacked PRs, and why are they useful?
