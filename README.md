@@ -89,7 +89,7 @@ For instance, if we have
 
 ```
 
-Then the tool will consider the top two commits as changes, for which we’re
+Then the tool will consider the top three commits as changes, for which we’re
 trying to create a stack.
 
 > **Pro-tip**: a convenient way to see what commits will be considered by
