@@ -1,10 +1,11 @@
-# Stacked PRs Workflow
+# Stacked PRs for GitHub
 
-## What exactly are stacked PRs, and why are they useful?
+This is a command-line tool that helps you create multiple GitHub
+pull requests (PRs) all at once, with a stacked order of dependencies.
 
 Imagine that we have a change `A` and a change `B` depending on `A`, and we
 would like to get them both reviewed. Without stacked PRs one would have to
-create two PRs: `A`, `A+B`. The second PR would be difficult to review as it
+create two PRs: `A` and `A+B`. The second PR would be difficult to review as it
 includes all the changes simultaneously. With stacked PRs the first PR will
 have only the change `A`, and the second PR will only have the change `B`. With
 stacked PRs one can group related changes together making them easier to
@@ -13,8 +14,6 @@ review.
 Example:
 ![StackedPRExample1](img/StackedPRExample1.png)
 
-## `stack-pr.py` User Guide
-
 ## Dependencies
 
 This is a non-comprehensive list of dependencies required by `stack-pr.py`:
@@ -22,7 +21,7 @@ This is a non-comprehensive list of dependencies required by `stack-pr.py`:
 - Install `gh`, e.g., `brew install gh` on MacOS.
 - Run `gh auth login` with SSH
 
-### Workflow
+## Workflow
 
 `utils/stack-pr.py` is a script allowing you to work with stacked PRs: submit,
 view, and land them.
@@ -70,7 +69,7 @@ branch), `HEAD` is the git revision `HEAD`, and `TARGET` is `main` on remote
 and `-T` respectively and accept the standard git notation: e.g. one can use
 `-B HEAD~2`, to create a stack from the last two commits.
 
-#### Example
+### Example
 
 The first step before creating a stack of PRs is to double-check the changes
 we’re going to post.
@@ -177,7 +176,7 @@ If we inspect `origin/main` now we will see our changes on top:
 **9ae059a93**   [MOP] Placeholder for MOPPrimitives. (#3984)
 ```
 
-### Specifying Custom Commit Ranges
+## Specifying custom commit ranges
 
 The example above used the default commit range - `main..HEAD`, but you can
 specify a custom range too. Below are several commonly useful invocations of
