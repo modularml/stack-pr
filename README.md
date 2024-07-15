@@ -12,7 +12,7 @@ stacked PRs one can group related changes together making them easier to
 review.
 
 Example:
-![StackedPRExample1](img/StackedPRExample1.png)
+![StackedPRExample1](https://modular-assets.s3.amazonaws.com/images/stackpr/example_0.png)
 
 ## Dependencies
 
@@ -23,7 +23,7 @@ This is a non-comprehensive list of dependencies required by `stack-pr.py`:
 
 ## Workflow
 
-`utils/stack-pr.py` is a script allowing you to work with stacked PRs: submit,
+`stack-pr.py` is a script allowing you to work with stacked PRs: submit,
 view, and land them.
 
 `stack-pr.py` tool has four commands:
@@ -81,10 +81,12 @@ For instance, if we have
 
 ```bash
 # git checkout my-feature
-# git log -n 3  --format=oneline
-**fcc6727ce** (**my-feature**)        [KGEN] POP: Switch pop.memset from scalar<ui8> to simd<1,ui8>.
-**e43233f6f**                     [KGEN] Switch ZAP_DebugAssert from scalar<t> to simd<1,t>.
-**8ea45c371** (**origin/main, main**) [Lit] Split core expr data structures out to LitExprs.h, NFC. (#4083)
+# git log -n 4  --format=oneline
+**cc932b71c** (**my-feature**)        Optimized navigation algorithms for deep space travel
+**3475c898f**                         Fixed zero-gravity coffee spill bug in beverage dispenser
+**99c4cd9a7**                         Added warp drive functionality to spaceship engine.
+**d2b7bcf87** (**origin/main, main**) Added module for deploying remote space probes
+
 ```
 
 Then the tool will consider the top two commits as changes, for which we’re
@@ -102,11 +104,13 @@ We can double-check that by running the script with `view` command - it is
 always a safe command to run:
 
 ```bash
-# utils/stack-pr.py view
+# stack-pr.py view
 ...
+VIEW
 **Stack:**
-   * **fcc6727c** (No PR): [KGEN] POP: Switch pop.memset from scalar<ui8> to simd<1,ui8>.
-   * **e43233f6** (No PR): [KGEN] Switch ZAP_DebugAssert from scalar<t> to simd<1,t>.
+   * **cc932b71** (No PR): Optimized navigation algorithms for deep space travel
+   * **3475c898** (No PR): Fixed zero-gravity coffee spill bug in beverage dispenser
+   * **99c4cd9a** (No PR): Added warp drive functionality to spaceship engine.
 SUCCESS!
 ```
 
@@ -115,7 +119,7 @@ corresponding PRs and cross-link them. To do that, we run the tool with
 `submit` command:
 
 ```bash
-# utils/stack-pr.py submit
+# stack-pr.py submit
 ...
 SUCCESS!
 ```
@@ -136,17 +140,19 @@ If the command succeeded, we should see “SUCCESS!” in the end, and we can no
 run `view` again to look at the new stack:
 
 ```python
-# utils/stack-pr.py view
+# stack-pr.py view
 ...
-**Stack**:
-   * **00093421** (#4085, 'ZolotukhinM/stack/2' -> 'ZolotukhinM/stack/1'): [KGEN] POP: Switch pop.memset from scalar<ui8> to simd<1,ui8>.
-   * **50bdb483** (#4084, 'ZolotukhinM/stack/1' -> 'main'): [KGEN] Switch ZAP_DebugAssert from scalar<t> to simd<1,t>.
+VIEW
+**Stack:**
+   * **cc932b71** (#439, 'ZolotukhinM/stack/103' -> 'ZolotukhinM/stack/102'): Optimized navigation algorithms for deep space travel
+   * **3475c898** (#438, 'ZolotukhinM/stack/102' -> 'ZolotukhinM/stack/101'): Fixed zero-gravity coffee spill bug in beverage dispenser
+   * **99c4cd9a** (#437, 'ZolotukhinM/stack/101' -> 'main'): Added warp drive functionality to spaceship engine.
 SUCCESS!
 ```
 
 We can also go to github and check our PRs there:
 
-![StackedPRExample2](img/StackedPRExample2.png)
+![StackedPRExample2](https://modular-assets.s3.amazonaws.com/images/stackpr/example_1.png)
 
 If we need to make changes to any of the PRs (e.g. to address the review
 feedback), we simply amend the desired changes to the appropriate git commits
@@ -155,26 +161,34 @@ and run `submit` again. If needed, we can rearrange commits or add new ones.
 When we are ready to merge our changes, we use `land` command.
 
 ```python
-# utils/stack-pr.py land
+# stack-pr.py land
+LAND
+Stack:
+   * cc932b71 (#439, 'ZolotukhinM/stack/103' -> 'ZolotukhinM/stack/102'): Optimized navigation algorithms for deep space travel
+   * 3475c898 (#438, 'ZolotukhinM/stack/102' -> 'ZolotukhinM/stack/101'): Fixed zero-gravity coffee spill bug in beverage dispenser
+   * 99c4cd9a (#437, 'ZolotukhinM/stack/101' -> 'main'): Added warp drive functionality to spaceship engine.
+Landing 99c4cd9a (#437, 'ZolotukhinM/stack/101' -> 'main'): Added warp drive functionality to spaceship engine.
 ...
-**Stack**:
-   * **00093421** (#4085, 'ZolotukhinM/stack/2' -> 'ZolotukhinM/stack/1'): [KGEN] POP: Switch pop.memset from scalar<ui8> to simd<1,ui8>.
-   * **50bdb483** (#4084, 'ZolotukhinM/stack/1' -> 'main'): [KGEN] Switch ZAP_DebugAssert from scalar<t> to simd<1,t>.
+Rebasing 3475c898 (#438, 'ZolotukhinM/stack/102' -> 'ZolotukhinM/stack/101'): Fixed zero-gravity coffee spill bug in beverage dispenser
+...
+Rebasing cc932b71 (#439, 'ZolotukhinM/stack/103' -> 'ZolotukhinM/stack/102'): Optimized navigation algorithms for deep space travel
 ...
 SUCCESS!
 ```
 
-That’s it!
+This command lands the first PR of the stack and rebases the rest. If we run
+`view` command after `land` we will find the remaining, not yet-landed PRs
+there:
 
-If we inspect `origin/main` now we will see our changes on top:
-
-```bash
-# git log origin/main -n 3 --format=oneline
-
-**46e840e98**   [KGEN] POP: Switch pop.memset from scalar<ui8> to simd<1,ui8>. (#4085)
-**f1b82f6a4**   [KGEN] Switch ZAP_DebugAssert from scalar<t> to simd<1,t>. (#4084)
-**9ae059a93**   [MOP] Placeholder for MOPPrimitives. (#3984)
+```python
+# stack-pr.py view
+VIEW
+**Stack:**
+   * **8177f347** (#439, 'ZolotukhinM/stack/103' -> 'ZolotukhinM/stack/102'): Optimized navigation algorithms for deep space travel
+   * **35c429c8** (#438, 'ZolotukhinM/stack/102' -> 'main'): Fixed zero-gravity coffee spill bug in beverage dispenser
 ```
+
+This way we can land all the PRs from the stack one by one.
 
 ## Specifying custom commit ranges
 
@@ -184,13 +198,13 @@ the script:
 
 ```bash
 # Submit a stack of last 5 commits
-utils/stack-pr.py submit -B HEAD~5
+stack-pr.py submit -B HEAD~5
 
 # Use 'origin/main' instead of 'main' as the base for the stack
-utils/stack-pr.py submit -B origin/main
+stack-pr.py submit -B origin/main
 
 # Do not include last two commits to the stack
-utils/stack-pr.py submit -H HEAD~2
+stack-pr.py submit -H HEAD~2
 ```
 
 These options work for all script commands (and it’s recommended to first use
@@ -200,12 +214,12 @@ land first three of them:
 
 ```bash
 # Inspect what commits will be included HEAD~5..HEAD
-utils/stack-pr.py view -B HEAD~5
+stack-pr.py view -B HEAD~5
 # Create a stack from last five commits
-utils/stack-pr.py submit -B HEAD~5
+stack-pr.py submit -B HEAD~5
 
 # Inspect what commits will be included into the range HEAD~5..HEAD~2
-utils/stack-pr.py view -B HEAD~5 -H HEAD~2
+stack-pr.py view -B HEAD~5 -H HEAD~2
 # Land first three PRs from the stack
-utils/stack-pr.py land -B HEAD~5 -H HEAD~2
+stack-pr.py land -B HEAD~5 -H HEAD~2
 ```
