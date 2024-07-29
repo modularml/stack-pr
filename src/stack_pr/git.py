@@ -5,11 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Set
 
-from shell_commands import (
-    CalledProcessError,
-    get_command_output,
-    run_shell_command,
-)
+from .shell_commands import get_command_output, run_shell_command
 
 
 class GitError(Exception):
@@ -42,9 +38,7 @@ def is_full_git_sha(s: str) -> bool:
     return all(c in digits for c in s)
 
 
-def shallow_clone(
-    clone_dir: Path, url: str, ref: str, remove_git: bool = False
-):
+def shallow_clone(clone_dir: Path, url: str, ref: str, remove_git: bool = False):
     """Clone the given repo without any git history.
 
     This makes the cloning faster for repos with large histories.
@@ -121,9 +115,9 @@ def get_current_branch_name(repo_dir: Optional[Path] = None) -> str:
         return get_command_output(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_dir
         ).strip()
-    except CalledProcessError as e:
+    except subprocess.CalledProcessError as e:
         if e.returncode == 128:
-            raise GitError("Not inside a valid git repository.") from None
+            raise GitError("Not inside a valid git repository.") from e
         raise
 
 
@@ -146,7 +140,7 @@ def get_uncommitted_changes(
     """
     try:
         out = get_command_output(["git", "status", "--porcelain"], cwd=repo_dir)
-    except CalledProcessError as e:
+    except subprocess.CalledProcessError as e:
         if e.returncode == 128:
             raise GitError("Not inside a valid git repository.") from None
         raise
@@ -168,11 +162,11 @@ def check_gh_installed():
 
     try:
         run_shell_command(["gh"], capture_output=True)
-    except CalledProcessError:
+    except subprocess.CalledProcessError as err:
         raise GitError(
             "'gh' is not installed. Please visit https://cli.github.com/ for"
             " installation instuctions."
-        )
+        ) from err
 
 
 # TODO: figure out how to test this

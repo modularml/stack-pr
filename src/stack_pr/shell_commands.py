@@ -1,7 +1,6 @@
 import subprocess
 from pathlib import Path
 from typing import Any, Iterable, Union
-from subprocess import CalledProcessError, CompletedProcess, list2cmdline
 
 ShellCommand = Iterable[Union[str, Path]]
 
@@ -25,7 +24,7 @@ def run_shell_command(
     """
     if "shell" in kwargs:
         raise ValueError("shell support has been removed")
-    cmdline = subprocess.list2cmdline(cmd)
+    _ = subprocess.list2cmdline(cmd)
     kwargs.update({"check": check})
     return subprocess.run(list(map(str, cmd)), **kwargs)
 
@@ -45,8 +44,6 @@ def get_command_output(cmd: ShellCommand, **kwargs: Any) -> str:
         ValueError: if the capture_output keyword argument is specified.
     """
     if "capture_output" in kwargs:
-        raise ValueError(
-            "Cannot pass capture_output when using get_command_output"
-        )
+        raise ValueError("Cannot pass capture_output when using get_command_output")
     proc = run_shell_command(cmd, capture_output=True, **kwargs)
     return proc.stdout.decode("utf-8").rstrip()

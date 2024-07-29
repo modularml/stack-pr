@@ -1,0 +1,49 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+name = "stack-pr"
+authors = [
+    {name = "Modular Inc", email = "hello@modular.com"},
+]
+maintainers = [
+    {name = "Modular Inc", email = "hello@modular.com"}
+]
+description = "Stacked PRs for GitHub"
+version = "1.0"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+keywords = ["stacked-prs", "github", "pull-requests", "stack-pr", "git", "version-control"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Version Control :: Git",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/modularml/stack-pr"
+Repository = "https://github.com/modularml/stack-pr"
+"Bug Tracker" = "https://github.com/modularml/stack-pr/issues"
+
+[project.scripts]
+stack-pr = "stack_pr.cli:main"
+
+[tool.pdm]
+distribution = true
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64"]
+
+[tool.pixi.pypi-dependencies]
+stack-pr = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+python = ">=3.8"
