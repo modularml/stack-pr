@@ -21,12 +21,26 @@ This is a non-comprehensive list of dependencies required by `stack-pr.py`:
 - Install `gh`, e.g., `brew install gh` on MacOS.
 - Run `gh auth login` with SSH
 
+## Installation
+
+To install via [pipx](https://pipx.pypa.io/stable/) run:
+
+```bash
+pipx install stack-pr
+```
+
+Manually, you can clone the repository and run the following command:
+
+```bash
+pipx install .
+```
+
 ## Workflow
 
-`stack-pr.py` is a script allowing you to work with stacked PRs: submit,
+`stack-pr` is a tool allowing you to work with stacked PRs: submit,
 view, and land them.
 
-`stack-pr.py` tool has four commands:
+The `stack-pr` tool has four commands:
 
 - `submit` (or `export`) - create a new stack of PRs from the given set of
   commits. One can think of this as “push my local changes to the corresponding
@@ -104,7 +118,7 @@ We can double-check that by running the script with `view` command - it is
 always a safe command to run:
 
 ```bash
-# stack-pr.py view
+# stack-pr view
 ...
 VIEW
 **Stack:**
@@ -119,7 +133,7 @@ corresponding PRs and cross-link them. To do that, we run the tool with
 `submit` command:
 
 ```bash
-# stack-pr.py submit
+# stack-pr submit
 ...
 SUCCESS!
 ```
@@ -140,7 +154,7 @@ If the command succeeded, we should see “SUCCESS!” in the end, and we can no
 run `view` again to look at the new stack:
 
 ```python
-# stack-pr.py view
+# stack-pr view
 ...
 VIEW
 **Stack:**
@@ -161,7 +175,7 @@ and run `submit` again. If needed, we can rearrange commits or add new ones.
 When we are ready to merge our changes, we use `land` command.
 
 ```python
-# stack-pr.py land
+# stack-pr land
 LAND
 Stack:
    * cc932b71 (#439, 'ZolotukhinM/stack/103' -> 'ZolotukhinM/stack/102'): Optimized navigation algorithms for deep space travel
@@ -181,7 +195,7 @@ This command lands the first PR of the stack and rebases the rest. If we run
 there:
 
 ```python
-# stack-pr.py view
+# stack-pr view
 VIEW
 **Stack:**
    * **8177f347** (#439, 'ZolotukhinM/stack/103' -> 'ZolotukhinM/stack/102'): Optimized navigation algorithms for deep space travel
@@ -198,13 +212,13 @@ the script:
 
 ```bash
 # Submit a stack of last 5 commits
-stack-pr.py submit -B HEAD~5
+stack-pr submit -B HEAD~5
 
 # Use 'origin/main' instead of 'main' as the base for the stack
-stack-pr.py submit -B origin/main
+stack-pr submit -B origin/main
 
 # Do not include last two commits to the stack
-stack-pr.py submit -H HEAD~2
+stack-pr submit -H HEAD~2
 ```
 
 These options work for all script commands (and it’s recommended to first use
@@ -214,12 +228,12 @@ land first three of them:
 
 ```bash
 # Inspect what commits will be included HEAD~5..HEAD
-stack-pr.py view -B HEAD~5
+stack-pr view -B HEAD~5
 # Create a stack from last five commits
-stack-pr.py submit -B HEAD~5
+stack-pr submit -B HEAD~5
 
 # Inspect what commits will be included into the range HEAD~5..HEAD~2
-stack-pr.py view -B HEAD~5 -H HEAD~2
+stack-pr view -B HEAD~5 -H HEAD~2
 # Land first three PRs from the stack
-stack-pr.py land -B HEAD~5 -H HEAD~2
+stack-pr land -B HEAD~5 -H HEAD~2
 ```

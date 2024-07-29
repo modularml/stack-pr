@@ -55,14 +55,14 @@ import os
 import re
 from subprocess import SubprocessError
 
-from git import (
+from .git import (
     branch_exists,
     check_gh_installed,
     get_current_branch_name,
     get_gh_username,
     get_uncommitted_changes,
 )
-from shell_commands import get_command_output, run_shell_command
+from .shell_commands import get_command_output, run_shell_command
 from typing import List, NamedTuple, Optional, Pattern
 
 # A bunch of regexps for parsing commit messages and PR descriptions
@@ -199,9 +199,7 @@ class CommitHeader:
         return self._search_group(RE_RAW_COMMIT_ID, "commit")
 
     def parents(self) -> List[str]:
-        return [
-            m.group("commit") for m in RE_RAW_PARENT.finditer(self.raw_header)
-        ]
+        return [m.group("commit") for m in RE_RAW_PARENT.finditer(self.raw_header)]
 
     def author(self) -> str:
         return self._search_group(RE_RAW_AUTHOR, "author")
@@ -214,8 +212,7 @@ class CommitHeader:
 
     def commit_msg(self) -> str:
         return "\n".join(
-            m.group("line")
-            for m in RE_RAW_COMMIT_MSG_LINE.finditer(self.raw_header)
+            m.group("line") for m in RE_RAW_COMMIT_MSG_LINE.finditer(self.raw_header)
         )
 
 
@@ -408,9 +405,7 @@ def get_stack(base: str, head: str) -> List[StackEntry]:
     st: List[StackEntry] = []
     stack = (
         split_header(
-            get_command_output(
-                ["git", "rev-list", "--header", "^" + base, head]
-            )
+            get_command_output(["git", "rev-list", "--header", "^" + base, head])
         )
     )[::-1]
 
@@ -561,9 +556,7 @@ def init_local_branches(st: List[StackEntry], remote: str):
     log(h("Initializing local branches"), level=1)
     set_head_branches(st, remote)
     for e in st:
-        run_shell_command(
-            ["git", "checkout", e.commit.commit_id(), "-B", e.head]
-        )
+        run_shell_command(["git", "checkout", e.commit.commit_id(), "-B", e.head])
 
 
 def push_branches(st: List[StackEntry], remote):
@@ -574,12 +567,8 @@ def push_branches(st: List[StackEntry], remote):
 
 
 def print_cmd_failure_details(exc: SubprocessError):
-    cmd_stdout = (
-        exc.stdout.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
-    )
-    cmd_stderr = (
-        exc.stderr.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
-    )
+    cmd_stdout = exc.stdout.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
+    cmd_stderr = exc.stderr.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
     print(f"Exitcode: {exc.returncode}")
     print(f"Stdout: {cmd_stdout}")
     print(f"Stderr: {cmd_stderr}")
@@ -656,9 +645,7 @@ def add_cross_links(st: List[StackEntry], keep_body: bool):
         if keep_body:
             # Keep current body of the PR after the cross links component
             current_pr_body = get_current_pr_body(e)
-            pr_body.append(
-                current_pr_body.split(CROSS_LINKS_DELIMETER, 1)[-1].lstrip()
-            )
+            pr_body.append(current_pr_body.split(CROSS_LINKS_DELIMETER, 1)[-1].lstrip())
         else:
             pr_body.extend(
                 [
@@ -827,9 +814,7 @@ def command_submit(
     # Now we have all the branches, so we can create the corresponding PRs
     log(h("Submitting PRs"), level=1)
     for e_idx, e in enumerate(st):
-        is_pr_draft = draft or (
-            (draft_bitmask is not None) and draft_bitmask[e_idx]
-        )
+        is_pr_draft = draft or ((draft_bitmask is not None) and draft_bitmask[e_idx])
         create_pr(e, is_pr_draft, reviewer)
 
     # Verify consistency in everything we have so far
@@ -998,9 +983,7 @@ def command_land(args: CommonArgs):
         for e in prs_to_rebase:
             rebase_pr(e, args.remote, args.target)
         # Change the target of the new bottom-most PR in the stack to 'target'
-        run_shell_command(
-            ["gh", "pr", "edit", prs_to_rebase[0].pr, "-B", args.target]
-        )
+        run_shell_command(["gh", "pr", "edit", prs_to_rebase[0].pr, "-B", args.target])
 
     # Delete local and remote stack branches
     run_shell_command(["git", "checkout", current_branch])
@@ -1013,9 +996,7 @@ def command_land(args: CommonArgs):
         run_shell_command(
             ["git", "rebase", f"{args.remote}/{args.target}", args.target]
         )
-    run_shell_command(
-        ["git", "rebase", f"{args.remote}/{args.target}", current_branch]
-    )
+    run_shell_command(["git", "rebase", f"{args.remote}/{args.target}", current_branch])
 
     log(h(blue("SUCCESS!")), level=1)
 
@@ -1143,13 +1124,9 @@ def create_argparser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(help="sub-command help", dest="command")
 
     common_parser = argparse.ArgumentParser(add_help=False)
-    common_parser.add_argument(
-        "-R", "--remote", default="origin", help="Remote name"
-    )
+    common_parser.add_argument("-R", "--remote", default="origin", help="Remote name")
     common_parser.add_argument("-B", "--base", help="Local base branch")
-    common_parser.add_argument(
-        "-H", "--head", default="HEAD", help="Local head branch"
-    )
+    common_parser.add_argument("-H", "--head", default="HEAD", help="Local head branch")
     common_parser.add_argument(
         "-T", "--target", default="main", help="Remote target branch"
     )
