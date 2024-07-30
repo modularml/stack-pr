@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
-#
 # stack-pr: a tool for working with stacked PRs on github.
 #
-# ------------------
-# stack-pr.py submit
-# ------------------
+# ---------------
+# stack-pr submit
+# ---------------
 #
 # Semantics:
 #  1. Find merge-base (the most recent commit from 'main' in the current branch)
@@ -23,9 +21,9 @@
 # branch of each PR will be the head branch of the previous PR, or 'main' for
 # the first PR in the stack.
 #
-# ----------------
-# stack-pr.py land
-# ----------------
+# -------------
+# stack-pr land
+# -------------
 #
 # Semantics:
 #  1. Find merge-base (the most recent commit from 'main' in the current branch)
@@ -38,9 +36,9 @@
 # If 'land' succeeds, all the PRs from the stack will be merged into 'main',
 # all the corresponding remote and local branches deleted.
 #
-# -------------------
-# stack-pr.py abandon
-# -------------------
+# ----------------
+# stack-pr abandon
+# ----------------
 #
 # Semantics:
 # For all commits in the stack that have valid stack-info:
