@@ -22,10 +22,14 @@ jobs:
         with:
           python-version: "3.9"
 
+      - name: Setup pdm
+        uses: pdm-project/setup-pdm@v3
+        with:
+          python-version: "3.9"
+          cache: true
+
       - name: Build package
-        run: |
-          pip install build
-          python -m build
+        run: pdm build
       
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
