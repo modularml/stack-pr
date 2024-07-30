@@ -10,7 +10,7 @@ authors = [
 maintainers = [
     {name = "Modular Inc", email = "hello@modular.com"}
 ]
-description = "Stacked PRs for GitHub."
+description = "Stacked PR CLI for Github"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
@@ -24,6 +24,7 @@ classifiers = [
 ]
 # Version is dynamically set by pdm by the SCM version
 dynamic = ["version"]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/modularml/stack-pr"
@@ -35,8 +36,10 @@ stack-pr = "stack_pr.cli:main"
 
 [tool.pdm]
 distribution = true
+
+[tool.pdm.version]
 source = "scm"
-fallback_version = "0.0.0"
+fallback_version = "0.1.0"
 
 [tool.pixi.project]
 channels = ["conda-forge"]
