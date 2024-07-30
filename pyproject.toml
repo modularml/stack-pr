@@ -13,7 +13,7 @@ maintainers = [
 description = "Stacked PRs for GitHub."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 keywords = ["stacked-prs", "github", "pull-requests", "stack-pr", "git", "version-control"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
