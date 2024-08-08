@@ -53,14 +53,14 @@ import os
 import re
 from subprocess import SubprocessError
 
-from .git import (
+from stack_pr.git import (
     branch_exists,
     check_gh_installed,
     get_current_branch_name,
     get_gh_username,
     get_uncommitted_changes,
 )
-from .shell_commands import get_command_output, run_shell_command
+from stack_pr.shell_commands import get_command_output, run_shell_command
 from typing import List, NamedTuple, Optional, Pattern
 
 # A bunch of regexps for parsing commit messages and PR descriptions
@@ -743,7 +743,7 @@ def deduce_base(args: CommonArgs) -> CommonArgs:
     if args.base:
         return args
     deduced_base = get_command_output(
-        ["git", "merge-base", args.head, f"{args.remote}/main"]
+        ["git", "merge-base", args.head, f"{args.remote}/{args.target}"]
     )
     return CommonArgs(deduced_base, args.head, args.remote, args.target)
 
