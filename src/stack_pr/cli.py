@@ -269,7 +269,7 @@ class StackEntry:
     def has_missing_info(self) -> bool:
         return None in (self._pr, self._head, self._base)
 
-    def pprint(self):
+    def pprint(self, links: bool):
         s = b(self.commit.commit_id()[:8])
         pr_string = None
         if self.has_pr():
@@ -290,10 +290,14 @@ class StackEntry:
         if pr_string or branch_string:
             s += ")"
         s += ": " + self.commit.title()
+
+        if links and self.has_pr():
+            s = link(self.pr, s)
+
         return s
 
     def __repr__(self):
-        return self.pprint()
+        return self.pprint(False)
 
     def read_metadata(self):
         self.commit.commit_msg()
@@ -339,6 +343,16 @@ def blue(s: str):
 
 def red(s: str):
     return bcolors.FAIL + s + bcolors.ENDC
+
+
+# https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
+def link(location: str, text: str):
+    """
+    Emits a link to the terminal using the terminal hyperlink specification.
+
+    Does not properly implement file URIs. Only use with web URIs.
+    """
+    return f"\033]8;;{location}\033\\{text}\033]8;;\033\\"
 
 
 def error(msg):
@@ -470,10 +484,10 @@ def verify(st: List[StackEntry], check_base: bool = False):
             raise RuntimeError
 
 
-def print_stack(st: List[StackEntry], level=1):
+def print_stack(st: List[StackEntry], links: bool, level=1):
     log(b("Stack:"), level=level)
     for e in reversed(st):
-        log("   * " + e.pprint(), level=level)
+        log("   * " + e.pprint(links), level=level)
 
 
 def draft_bitmask_type(value: str) -> List[bool]:
@@ -722,10 +736,11 @@ class CommonArgs(NamedTuple):
     head: str
     remote: str
     target: str
+    hyperlinks: bool
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "CommonArgs":
-        return cls(args.base, args.head, args.remote, args.target)
+        return cls(args.base, args.head, args.remote, args.target, args.hyperlinks)
 
 
 # If the base isn't explicitly specified, find the merge base between
@@ -745,7 +760,7 @@ def deduce_base(args: CommonArgs) -> CommonArgs:
     deduced_base = get_command_output(
         ["git", "merge-base", args.head, f"{args.remote}/{args.target}"]
     )
-    return CommonArgs(deduced_base, args.head, args.remote, args.target)
+    return CommonArgs(deduced_base, args.head, args.remote, args.target, args.hyperlinks)
 
 
 def print_tips_after_export(st: List[StackEntry], args: CommonArgs):
@@ -797,7 +812,7 @@ def command_submit(
     # elements
     init_local_branches(st, args.remote)
     set_base_branches(st, args.target)
-    print_stack(st)
+    print_stack(st, args.hyperlinks)
 
     # If the current branch contains commits from the stack, we will need to
     # rebase it in the end since the commits will be modified.
@@ -857,7 +872,7 @@ def command_submit(
 # LAND
 # ===----------------------------------------------------------------------=== #
 def rebase_pr(e: StackEntry, remote: str, target: str):
-    log(b("Rebasing ") + e.pprint(), level=2)
+    log(b("Rebasing ") + e.pprint(False), level=2)
     # Rebase the head branch to the most recent 'origin/main'
     run_shell_command(["git", "fetch", "--prune", remote])
     cmd = ["git", "checkout", f"{remote}/{e.head}", "-B", e.head]
@@ -883,7 +898,7 @@ def rebase_pr(e: StackEntry, remote: str, target: str):
 
 
 def land_pr(e: StackEntry, remote: str, target: str):
-    log(b("Landing ") + e.pprint(), level=2)
+    log(b("Landing ") + e.pprint(False), level=2)
     # Rebase the head branch to the most recent 'origin/main'
     run_shell_command(["git", "fetch", "--prune", remote])
     cmd = ["git", "checkout", f"{remote}/{e.head}", "-B", e.head]
@@ -965,7 +980,7 @@ def command_land(args: CommonArgs):
     # already be there from the metadata that commits need to have by that
     # point.
     set_base_branches(st, args.target)
-    print_stack(st)
+    print_stack(st, args.hyperlinks)
 
     # Verify that the stack is correct before trying to land it.
     verify(st, check_base=True)
@@ -977,7 +992,7 @@ def command_land(args: CommonArgs):
     if len(st) > 1:
         log(h("Rebasing the rest of the stack"), level=1)
         prs_to_rebase = st[1:]
-        print_stack(prs_to_rebase)
+        print_stack(prs_to_rebase, args.hyperlinks)
         for e in prs_to_rebase:
             rebase_pr(e, args.remote, args.target)
         # Change the target of the new bottom-most PR in the stack to 'target'
@@ -1028,7 +1043,7 @@ def command_abandon(args: CommonArgs):
 
     init_local_branches(st, args.remote)
     set_base_branches(st, args.target)
-    print_stack(st)
+    print_stack(st, args.hyperlinks)
 
     log(h("Stripping stack metadata from commit messages"), level=1)
 
@@ -1106,7 +1121,7 @@ def command_view(args: CommonArgs):
 
     set_head_branches(st, args.remote)
     set_base_branches(st, args.target)
-    print_stack(st)
+    print_stack(st, args.hyperlinks)
     print_tips_after_view(st, args)
     log(h(blue("SUCCESS!")), level=1)
 
@@ -1127,6 +1142,9 @@ def create_argparser() -> argparse.ArgumentParser:
     common_parser.add_argument("-H", "--head", default="HEAD", help="Local head branch")
     common_parser.add_argument(
         "-T", "--target", default="main", help="Remote target branch"
+    )
+    common_parser.add_argument(
+        "--hyperlinks", action=argparse.BooleanOptionalAction, default=True, help="Enable or disable hyperlink support."
     )
 
     parser_submit = subparsers.add_parser(
