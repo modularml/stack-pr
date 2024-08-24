@@ -579,8 +579,16 @@ def push_branches(st: List[StackEntry], remote):
 
 
 def print_cmd_failure_details(exc: SubprocessError):
-    cmd_stdout = exc.stdout.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
-    cmd_stderr = exc.stderr.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
+    cmd_stdout = (
+        exc.stdout.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
+        if exc.stdout
+        else None
+    )
+    cmd_stderr = (
+        exc.stderr.decode("utf-8").replace("\\n", "\n").replace("\\t", "\t")
+        if exc.stderr
+        else None
+    )
     print(f"Exitcode: {exc.returncode}")
     print(f"Stdout: {cmd_stdout}")
     print(f"Stderr: {cmd_stderr}")
@@ -760,7 +768,9 @@ def deduce_base(args: CommonArgs) -> CommonArgs:
     deduced_base = get_command_output(
         ["git", "merge-base", args.head, f"{args.remote}/{args.target}"]
     )
-    return CommonArgs(deduced_base, args.head, args.remote, args.target, args.hyperlinks)
+    return CommonArgs(
+        deduced_base, args.head, args.remote, args.target, args.hyperlinks
+    )
 
 
 def print_tips_after_export(st: List[StackEntry], args: CommonArgs):
@@ -1144,7 +1154,10 @@ def create_argparser() -> argparse.ArgumentParser:
         "-T", "--target", default="main", help="Remote target branch"
     )
     common_parser.add_argument(
-        "--hyperlinks", action=argparse.BooleanOptionalAction, default=True, help="Enable or disable hyperlink support."
+        "--hyperlinks",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable or disable hyperlink support.",
     )
 
     parser_submit = subparsers.add_parser(
