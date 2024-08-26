@@ -145,6 +145,13 @@ If you are trying land the stack, please update it first by calling 'submit'.
 
 PR info from github: {d}
 """
+ERROR_STACKINFO_PR_NOT_MERGEABLE = """Associated PR is not mergeable on GitHub!
+     {e}
+
+Please fix the issues on GitHub.
+
+PR info from github: {d}
+"""
 ERROR_REPO_DIRTY = """There are uncommitted changes.
 
 Please commit or stash them before working with stacks.
@@ -438,7 +445,7 @@ def set_base_branches(st: List[StackEntry], target: str):
 
 def verify(st: List[StackEntry], check_base: bool = False):
     log(h("Verifying stack info"), level=1)
-    for e in st:
+    for index, e in enumerate(st):
         if e.has_missing_info():
             error(ERROR_STACKINFO_MISSING.format(**locals()))
             raise RuntimeError
@@ -454,7 +461,7 @@ def verify(st: List[StackEntry], check_base: bool = False):
                 "view",
                 e.pr,
                 "--json",
-                "baseRefName,headRefName,number,state,body,title,url",
+                "baseRefName,headRefName,number,state,body,title,url,mergeStateStatus",
             ]
         )
         d = json.loads(ghinfo)
@@ -481,6 +488,11 @@ def verify(st: List[StackEntry], check_base: bool = False):
         # we are trying to land it.
         if check_base and e.base != d["baseRefName"]:
             error(ERROR_STACKINFO_PR_BASE_MISMATCH.format(**locals()))
+            raise RuntimeError
+
+        # The first entry on the stack needs to be actually mergeable on GitHub.
+        if check_base and index == 0 and d["mergeStateStatus"] != "CLEAN":
+            error(ERROR_STACKINFO_PR_NOT_MERGEABLE.format(**locals()))
             raise RuntimeError
 
 
