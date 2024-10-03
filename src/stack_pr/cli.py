@@ -948,6 +948,10 @@ def land_pr(e: StackEntry, remote: str, target: str):
         input=pr_body.encode(),
     )
 
+def abandon_pr(e: StackEntry):
+    log(b("Abandoning ") + e.pprint(), level=2)
+
+    run_shell_command(["gh", "pr", "close", e.pr])
 
 def delete_local_branches(st: List[StackEntry]):
     log(h("Deleting local branches"), level=1)
@@ -1071,6 +1075,7 @@ def command_abandon(args: CommonArgs):
 
     last_hash = ""
     for e in st:
+        abandon_pr(e)
         last_hash = strip_metadata(e)
 
     log(h("Rebasing the current branch on top of updated top branch"), level=1)
