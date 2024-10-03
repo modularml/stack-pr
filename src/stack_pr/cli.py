@@ -967,7 +967,7 @@ def delete_remote_branches(st: List[StackEntry], remote: str):
             "git",
             "for-each-ref",
             f"refs/remotes/{remote}/{username}/stack",
-            "--format='%(refname)'",
+            "--format=%(refname)",
         ]
     ).split()
     refs = [x.replace(f"refs/remotes/{remote}/", "") for x in refs]
