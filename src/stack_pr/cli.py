@@ -48,6 +48,7 @@
 # ===----------------------------------------------------------------------=== #
 
 import argparse
+import configparser
 import json
 import os
 import re
@@ -1230,33 +1231,41 @@ def command_view(args: CommonArgs):
 # ===----------------------------------------------------------------------=== #
 
 
-def create_argparser() -> argparse.ArgumentParser:
+def create_argparser(
+    config: configparser.ConfigParser,
+) -> argparse.ArgumentParser:
     """Helper for CL option definition and parsing logic."""
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help="sub-command help", dest="command")
 
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument(
-        "-R", "--remote", default="origin", help="Remote name"
+        "-R",
+        "--remote",
+        default=config.get("repo", "remote", fallback="origin"),
+        help="Remote name",
     )
     common_parser.add_argument("-B", "--base", help="Local base branch")
     common_parser.add_argument(
         "-H", "--head", default="HEAD", help="Local head branch"
     )
     common_parser.add_argument(
-        "-T", "--target", default="main", help="Remote target branch"
+        "-T",
+        "--target",
+        default=config.get("repo", "target", fallback="main"),
+        help="Remote target branch",
     )
     common_parser.add_argument(
         "--hyperlinks",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=config.getboolean("common", "hyperlinks", fallback=True),
         help="Enable or disable hyperlink support.",
     )
     common_parser.add_argument(
         "-V",
         "--verbose",
         action="store_true",
-        default=False,
+        default=config.getboolean("common", "verbose", fallback=False),
         help="Enable verbose output from Git subcommands.",
     )
 
@@ -1269,14 +1278,14 @@ def create_argparser() -> argparse.ArgumentParser:
     parser_submit.add_argument(
         "--keep-body",
         action="store_true",
-        default=False,
+        default=config.getboolean("common", "keep_body", fallback=False),
         help="Keep current PR body and only add/update cross links",
     )
     parser_submit.add_argument(
         "-d",
         "--draft",
         action="store_true",
-        default=False,
+        default=config.getboolean("common", "draft", fallback=False),
         help="Submit PRs in draft mode",
     )
     parser_submit.add_argument(
@@ -1287,7 +1296,10 @@ def create_argparser() -> argparse.ArgumentParser:
     )
     parser_submit.add_argument(
         "--reviewer",
-        default=os.getenv("STACK_PR_DEFAULT_REVIEWER", default=""),
+        default=os.getenv(
+            "STACK_PR_DEFAULT_REVIEWER",
+            default=config.get("repo", "reviewer", fallback=""),
+        ),
         help="List of reviewers for the PR",
     )
 
@@ -1310,8 +1322,18 @@ def create_argparser() -> argparse.ArgumentParser:
     return parser
 
 
+def load_config(config_file):
+    config = configparser.ConfigParser()
+    if os.path.isfile(config_file):
+        config.read(config_file)
+    return config
+
+
 def main():
-    parser = create_argparser()
+    config_file = os.getenv("STACKPR_CONFIG", ".stack-pr.cfg")
+    config = load_config(config_file)
+
+    parser = create_argparser(config)
     args = parser.parse_args()
 
     if not args.command:
