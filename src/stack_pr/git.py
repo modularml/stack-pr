@@ -12,7 +12,7 @@ class GitError(Exception):
     pass
 
 
-def fetch_checkout_commit(repo_dir: Path, ref: str, remote: str = "origin"):
+def fetch_checkout_commit(repo_dir: Path, ref: str, quiet: bool, remote: str = "origin"):
     """Helper function to quickly fetch and checkout a new ref.
 
     Args:
@@ -21,8 +21,8 @@ def fetch_checkout_commit(repo_dir: Path, ref: str, remote: str = "origin"):
         remote: git remote to use. Default: "origin".
     """
 
-    run_shell_command(["git", "fetch", "--depth=1", remote, ref], cwd=repo_dir)
-    run_shell_command(["git", "checkout", "FETCH_HEAD"], cwd=repo_dir)
+    run_shell_command(["git", "fetch", "--depth=1", remote, ref], cwd=repo_dir, quiet=quiet)
+    run_shell_command(["git", "checkout", "FETCH_HEAD"], cwd=repo_dir, quiet=quiet)
 
 
 def is_full_git_sha(s: str) -> bool:
@@ -38,7 +38,7 @@ def is_full_git_sha(s: str) -> bool:
     return all(c in digits for c in s)
 
 
-def shallow_clone(clone_dir: Path, url: str, ref: str, remove_git: bool = False):
+def shallow_clone(clone_dir: Path, url: str, ref: str, quiet: bool, remove_git: bool = False):
     """Clone the given repo without any git history.
 
     This makes the cloning faster for repos with large histories.
@@ -62,9 +62,9 @@ def shallow_clone(clone_dir: Path, url: str, ref: str, remove_git: bool = False)
     else:
         clone_dir.mkdir(parents=True)
 
-    run_shell_command(["git", "init"], cwd=clone_dir)
-    run_shell_command(["git", "remote", "add", "origin", url], cwd=clone_dir)
-    fetch_checkout_commit(clone_dir, ref)
+    run_shell_command(["git", "init"], cwd=clone_dir, quiet=quiet)
+    run_shell_command(["git", "remote", "add", "origin", url], cwd=clone_dir, quiet=quiet)
+    fetch_checkout_commit(clone_dir, ref, quiet)
 
     if remove_git:
         shutil.rmtree(clone_dir / ".git")
@@ -88,6 +88,7 @@ def branch_exists(branch: str, repo_dir: Optional[Path] = None) -> bool:
         stderr=subprocess.DEVNULL,
         cwd=repo_dir,
         check=False,
+        quiet=True,
     )
     if proc.returncode == 0:
         return True
@@ -161,7 +162,7 @@ def check_gh_installed():
     """
 
     try:
-        run_shell_command(["gh"], capture_output=True)
+        run_shell_command(["gh"], capture_output=True, quiet=False)
     except subprocess.CalledProcessError as err:
         raise GitError(
             "'gh' is not installed. Please visit https://cli.github.com/ for"
