@@ -6,7 +6,7 @@ ShellCommand = Iterable[Union[str, Path]]
 
 
 def run_shell_command(
-        cmd: ShellCommand, *, quiet: bool, check: bool = True, **kwargs: Any
+    cmd: ShellCommand, *, quiet: bool, check: bool = True, **kwargs: Any
 ) -> subprocess.CompletedProcess:
     """Runs a shell command using the arguments provided.
 
@@ -27,7 +27,9 @@ def run_shell_command(
     _ = subprocess.list2cmdline(cmd)
     kwargs.update({"check": check})
     if quiet:
-        kwargs.update({"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL})
+        kwargs.update(
+            {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        )
     return subprocess.run(list(map(str, cmd)), **kwargs)
 
 
@@ -46,6 +48,8 @@ def get_command_output(cmd: ShellCommand, **kwargs: Any) -> str:
         ValueError: if the capture_output keyword argument is specified.
     """
     if "capture_output" in kwargs:
-        raise ValueError("Cannot pass capture_output when using get_command_output")
+        raise ValueError(
+            "Cannot pass capture_output when using get_command_output"
+        )
     proc = run_shell_command(cmd, capture_output=True, quiet=False, **kwargs)
     return proc.stdout.decode("utf-8").rstrip()

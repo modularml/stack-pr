@@ -12,7 +12,9 @@ class GitError(Exception):
     pass
 
 
-def fetch_checkout_commit(repo_dir: Path, ref: str, quiet: bool, remote: str = "origin"):
+def fetch_checkout_commit(
+    repo_dir: Path, ref: str, quiet: bool, remote: str = "origin"
+):
     """Helper function to quickly fetch and checkout a new ref.
 
     Args:
@@ -21,8 +23,12 @@ def fetch_checkout_commit(repo_dir: Path, ref: str, quiet: bool, remote: str = "
         remote: git remote to use. Default: "origin".
     """
 
-    run_shell_command(["git", "fetch", "--depth=1", remote, ref], cwd=repo_dir, quiet=quiet)
-    run_shell_command(["git", "checkout", "FETCH_HEAD"], cwd=repo_dir, quiet=quiet)
+    run_shell_command(
+        ["git", "fetch", "--depth=1", remote, ref], cwd=repo_dir, quiet=quiet
+    )
+    run_shell_command(
+        ["git", "checkout", "FETCH_HEAD"], cwd=repo_dir, quiet=quiet
+    )
 
 
 def is_full_git_sha(s: str) -> bool:
@@ -38,7 +44,9 @@ def is_full_git_sha(s: str) -> bool:
     return all(c in digits for c in s)
 
 
-def shallow_clone(clone_dir: Path, url: str, ref: str, quiet: bool, remove_git: bool = False):
+def shallow_clone(
+    clone_dir: Path, url: str, ref: str, quiet: bool, remove_git: bool = False
+):
     """Clone the given repo without any git history.
 
     This makes the cloning faster for repos with large histories.
@@ -63,7 +71,9 @@ def shallow_clone(clone_dir: Path, url: str, ref: str, quiet: bool, remove_git: 
         clone_dir.mkdir(parents=True)
 
     run_shell_command(["git", "init"], cwd=clone_dir, quiet=quiet)
-    run_shell_command(["git", "remote", "add", "origin", url], cwd=clone_dir, quiet=quiet)
+    run_shell_command(
+        ["git", "remote", "add", "origin", url], cwd=clone_dir, quiet=quiet
+    )
     fetch_checkout_commit(clone_dir, ref, quiet)
 
     if remove_git:
