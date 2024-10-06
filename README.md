@@ -237,3 +237,25 @@ stack-pr view -B HEAD~5 -H HEAD~2
 # Land first three PRs from the stack
 stack-pr land -B HEAD~5 -H HEAD~2
 ```
+
+## Command Line Options Reference
+The section is not added yet, contributions are welcome!
+
+### Config files
+Default values for command line options can be specified via a config file.
+Path to the config file can be specified via `STACKPR_CONFIG` envvar, and by
+default it's assumed to be `.stack-pr.cfg` in the current folder.
+
+An example of a config file:
+
+```cfg
+[common]
+verbose=True
+hyperlinks=True
+draft=False
+keep_body=False
+[repo]
+remote=origin
+target=main
+reviewer=GithubHandle1,GithubHandle2
+```
