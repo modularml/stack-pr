@@ -82,3 +82,5 @@ venv.bak/
 .pixi
 *.egg-info
 pixi.lock
+
+.stack-pr.cfg
