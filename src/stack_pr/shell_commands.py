@@ -4,6 +4,13 @@ from typing import Any, Iterable, Union
 
 ShellCommand = Iterable[Union[str, Path]]
 
+SHOW_COMMANDS = False
+
+
+def set_show_commands(val: bool):
+    global SHOW_COMMANDS
+    SHOW_COMMANDS = val
+
 
 def run_shell_command(
     cmd: ShellCommand, *, quiet: bool, check: bool = True, **kwargs: Any
@@ -30,6 +37,8 @@ def run_shell_command(
         kwargs.update(
             {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
         )
+    if SHOW_COMMANDS:
+        print(f"Running: {cmd}")
     return subprocess.run(list(map(str, cmd)), **kwargs)
 
 
