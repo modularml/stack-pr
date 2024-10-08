@@ -1035,16 +1035,18 @@ def delete_local_branches(st: List[StackEntry], verbose: bool):
     run_shell_command(cmd, check=False, quiet=not verbose)
 
 
-def delete_remote_branches(st: List[StackEntry], remote: str, verbose: bool):
+def delete_remote_branches(
+    st: List[StackEntry], remote: str, verbose: bool, branch_name_template: str
+):
     log(h("Deleting remote branches"), level=1)
     run_shell_command(["git", "fetch", "--prune", remote], quiet=not verbose)
 
-    username = get_gh_username()
+    branch_name_base = get_branch_name_base(branch_name_template)
     refs = get_command_output(
         [
             "git",
             "for-each-ref",
-            f"refs/remotes/{remote}/{username}/stack",
+            f"refs/remotes/{remote}/{branch_name_base}",
             "--format=%(refname)",
         ]
     ).split()
@@ -1111,7 +1113,9 @@ def command_land(args: CommonArgs):
     )
 
     delete_local_branches(st, args.verbose)
-    delete_remote_branches(st[:1], args.remote, args.verbose)
+    delete_remote_branches(
+        st[:1], args.remote, args.verbose, args.branch_name_template
+    )
 
     # If local branch {target} exists, rebase it on the remote/target
     if branch_exists(args.target):
@@ -1177,7 +1181,9 @@ def command_abandon(args: CommonArgs):
     )
 
     delete_local_branches(st, args.verbose)
-    delete_remote_branches(st, args.remote, args.verbose)
+    delete_remote_branches(
+        st, args.remote, args.verbose, args.branch_name_template
+    )
     log(h(blue("SUCCESS!")), level=1)
 
 
