@@ -54,6 +54,7 @@ import os
 import re
 from functools import cache
 from subprocess import SubprocessError
+from typing import List, NamedTuple, Optional, Pattern
 
 from stack_pr.git import (
     branch_exists,
@@ -67,7 +68,6 @@ from stack_pr.shell_commands import (
     run_shell_command,
     set_show_commands,
 )
-from typing import List, NamedTuple, Optional, Pattern
 
 # A bunch of regexps for parsing commit messages and PR descriptions
 RE_RAW_COMMIT_ID = re.compile(r"^(?P<commit>[a-f0-9]+)$", re.MULTILINE)
@@ -565,7 +565,9 @@ def add_or_update_metadata(
 @cache
 def get_branch_name_base(branch_name_template: str):
     username = get_gh_username()
+    current_branch_name = get_current_branch_name()
     branch_name_base = branch_name_template.replace("$USERNAME", username)
+    branch_name_base = branch_name_template.replace("$BRANCH",current_branch_name)
     return branch_name_base
 
 
@@ -1388,6 +1390,7 @@ def main():
     check_gh_installed()
 
     current_branch = get_current_branch_name()
+    get_branch_name_base(common_args.branch_name_template)
     try:
         if args.command != "view" and not is_repo_clean():
             error(ERROR_REPO_DIRTY)
