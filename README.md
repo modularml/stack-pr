@@ -258,5 +258,5 @@ keep_body=False
 remote=origin
 target=main
 reviewer=GithubHandle1,GithubHandle2
-branch_name_template=$USERNAME/stack
+branch_name_template=$USERNAME/$BRANCH
 ```
