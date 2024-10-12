@@ -62,7 +62,11 @@ from stack_pr.git import (
     get_gh_username,
     get_uncommitted_changes,
 )
-from stack_pr.shell_commands import get_command_output, run_shell_command
+from stack_pr.shell_commands import (
+    get_command_output,
+    run_shell_command,
+    set_show_commands,
+)
 from typing import List, NamedTuple, Optional, Pattern
 
 # A bunch of regexps for parsing commit messages and PR descriptions
@@ -1379,6 +1383,10 @@ def main():
         return
 
     common_args = CommonArgs.from_args(args)
+
+    if common_args.verbose:
+        # Output shell commands that we run if verbose=True
+        set_show_commands(True)
 
     check_gh_installed()
 
