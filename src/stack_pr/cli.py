@@ -1117,9 +1117,6 @@ def command_land(args: CommonArgs):
     )
 
     delete_local_branches(st, args.verbose)
-    delete_remote_branches(
-        st[:1], args.remote, args.verbose, args.branch_name_template
-    )
 
     # If local branch {target} exists, rebase it on the remote/target
     if branch_exists(args.target):
