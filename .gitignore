@@ -84,3 +84,4 @@ venv.bak/
 pixi.lock
 
 .stack-pr.cfg
+.vscode
