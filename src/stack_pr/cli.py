@@ -567,7 +567,9 @@ def get_branch_name_base(branch_name_template: str):
     username = get_gh_username()
     current_branch_name = get_current_branch_name()
     branch_name_base = branch_name_template.replace("$USERNAME", username)
-    branch_name_base = branch_name_template.replace("$BRANCH",current_branch_name)
+    branch_name_base = branch_name_template.replace(
+        "$BRANCH", current_branch_name
+    )
     return branch_name_base
 
 
