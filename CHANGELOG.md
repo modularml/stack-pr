@@ -1,5 +1,9 @@
 # Top of tree
 
+# Version 0.1.3
+
+* Fix a bug with replacing $USERNAME in the branch name. (#44)
+
 # Version 0.1.2
 
 * Added config files - now defaults for the CL options can be customized with
