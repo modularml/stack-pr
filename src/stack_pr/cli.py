@@ -506,7 +506,7 @@ def verify(st: List[StackEntry], check_base: bool = False):
             raise RuntimeError
 
         # The first entry on the stack needs to be actually mergeable on GitHub.
-        if check_base and index == 0 and d["mergeStateStatus"] != "CLEAN":
+        if check_base and index == 0 and d["mergeStateStatus"] != "CLEAN" and d["mergeStateStatus"] != "UNKNOWN":
             error(ERROR_STACKINFO_PR_NOT_MERGEABLE.format(**locals()))
             raise RuntimeError
 
