@@ -398,7 +398,7 @@ def is_valid_ref(ref: str, branch_name_template: str) -> bool:
 
 
 def last(ref: str, sep: str = "/") -> str:
-    return ref.rsplit("/", 1)[1]
+    return ref.rsplit(sep, 1)[-1]
 
 
 # TODO: Move to 'modular.utils.git'
